@@ -1834,53 +1834,15 @@ local Customization = {
 	end,
 
 	OToggle = function(self, Player, SelectedAccessories, Value)
-		if Value == "Overlay" then -- turn it on
-			for i, AccessoryTable in pairs(SelectedAccessories) do
-				if not AccessoryTable.IsItemPack then
-					AccessoryTable.ColorMode = "Overlay"
-					local Accessory : Accessory = AccessoryTable.Object
-					if not ValidateAccessoryOwner(Player, Accessory) then return end
-					CreateOverlay(Accessory, AccessoryTable.OTransparency, AccessoryTable.OColor)
-					if not AccessoryTable.IsMeshPart then
-						--Accessory.Handle:FindFirstChildOfClass("SpecialMesh").VertexColor = Vector3.new(1,1,1)
-					end
-				end
-			end
-		elseif Value == "VertexColor" then
-			for i, AccessoryTable in pairs(SelectedAccessories) do
-				if not AccessoryTable.IsItemPack then
-					AccessoryTable.ColorMode = "VertexColor"
-					local Accessory : Accessory = AccessoryTable.Object
-					if not ValidateAccessoryOwner(Player, Accessory) then return end
-					DeleteOverlay(Accessory)
-					if not AccessoryTable.IsMeshPart then
-						Accessory.Handle:FindFirstChildOfClass("SpecialMesh").VertexColor = AccessoryTable.Color
-					end
-				end
-			end
-		end
-		return SelectedAccessories
+		return AccessoryEditService.SetOverlayMode(Player, SelectedAccessories, Value, ValidateAccessoryOwner, CreateOverlay, DeleteOverlay)
 	end,
 
 	OTransparency = function(self, Player, SelectedAccessories, Value)
-		for i, AccessoryTable in pairs(SelectedAccessories) do
-			local Accessory : Accessory = AccessoryTable.Object
-			if not ValidateAccessoryOwner(Player, Accessory) then return end
-
-			ChangeOverlay(Accessory, Value, AccessoryTable.OColor)
-
-		end
-		return true
+		return AccessoryEditService.SetOverlayTransparency(Player, SelectedAccessories, Value, ValidateAccessoryOwner, ChangeOverlay)
 	end,
 
 	OColor = function(Self, Player, SelectedAccessories, Value)
-		for i, AccessoryTable in pairs(SelectedAccessories) do
-			local Accessory : Accessory = AccessoryTable.Object
-			if not ValidateAccessoryOwner(Player, Accessory) then return end
-
-			ChangeOverlay(Accessory, AccessoryTable.OTransparency, Value)
-
-		end
+		return AccessoryEditService.SetOverlayColor(Player, SelectedAccessories, Value, ValidateAccessoryOwner, ChangeOverlay)
 	end,
 
 

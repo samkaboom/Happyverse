@@ -210,4 +210,52 @@ function AccessoryEditService.MirrorAccessories(player, selectedAccessories, val
 	return mirroredAny and selectedAccessories or false
 end
 
+function AccessoryEditService.SetOverlayMode(player, selectedAccessories, value, validateAccessoryOwner, createOverlay, deleteOverlay)
+	if value == "Overlay" then
+		for _, accessoryTable in pairs(selectedAccessories) do
+			if not accessoryTable.IsItemPack then
+				accessoryTable.ColorMode = "Overlay"
+				local accessory : Accessory = accessoryTable.Object
+				if not validateAccessoryOwner(player, accessory) then return end
+				createOverlay(accessory, accessoryTable.OTransparency, accessoryTable.OColor)
+				if not accessoryTable.IsMeshPart then
+					--Accessory.Handle:FindFirstChildOfClass("SpecialMesh").VertexColor = Vector3.new(1,1,1)
+				end
+			end
+		end
+	elseif value == "VertexColor" then
+		for _, accessoryTable in pairs(selectedAccessories) do
+			if not accessoryTable.IsItemPack then
+				accessoryTable.ColorMode = "VertexColor"
+				local accessory : Accessory = accessoryTable.Object
+				if not validateAccessoryOwner(player, accessory) then return end
+				deleteOverlay(accessory)
+				if not accessoryTable.IsMeshPart then
+					accessory.Handle:FindFirstChildOfClass("SpecialMesh").VertexColor = accessoryTable.Color
+				end
+			end
+		end
+	end
+	return selectedAccessories
+end
+
+function AccessoryEditService.SetOverlayTransparency(player, selectedAccessories, value, validateAccessoryOwner, changeOverlay)
+	for _, accessoryTable in pairs(selectedAccessories) do
+		local accessory : Accessory = accessoryTable.Object
+		if not validateAccessoryOwner(player, accessory) then return end
+
+		changeOverlay(accessory, value, accessoryTable.OColor)
+	end
+	return true
+end
+
+function AccessoryEditService.SetOverlayColor(player, selectedAccessories, value, validateAccessoryOwner, changeOverlay)
+	for _, accessoryTable in pairs(selectedAccessories) do
+		local accessory : Accessory = accessoryTable.Object
+		if not validateAccessoryOwner(player, accessory) then return end
+
+		changeOverlay(accessory, accessoryTable.OTransparency, value)
+	end
+end
+
 return AccessoryEditService
