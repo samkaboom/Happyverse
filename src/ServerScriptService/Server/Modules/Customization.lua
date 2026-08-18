@@ -52,6 +52,7 @@ local DefaultAccessory = ServerAssets:WaitForChild("Custom Accessory")
 local ParticlesFolder = script:WaitForChild("Particles")
 local CustomizationModules = script.Parent:WaitForChild("CustomizationModules")
 local Serialization = require(CustomizationModules:WaitForChild("Serialization"))
+local AccessoryConversion = require(CustomizationModules:WaitForChild("AccessoryConversion"))
 
 local DefaultType = 0.25
 local DefaultProportion = 0
@@ -150,73 +151,8 @@ local function ChangeOverlay(Accessory : Accessory, Transparency : number, Color
 	end
 end
 
-local function GetMeshPartTextureId(handle)
-	local textureId = handle.TextureID or ""
-	if textureId and textureId ~= "" then
-		return textureId
-	end
-
-	for i, descendant in pairs(handle:GetDescendants()) do
-		if descendant:IsA("Texture") or descendant:IsA("Decal") then
-			if descendant.Texture and descendant.Texture ~= "" then
-				return descendant.Texture
-			end
-		end
-	end
-
-	return ""
-end
-
 local function ConvertToSpecialMesh(playerCharacter, accessory)
-	warn(playerCharacter, "converting to specialmesh attempt!", accessory)
-	local accessoryHandle = accessory:WaitForChild("Handle")
-	warn("going!")
-	local newAccessory = DefaultAccessory:Clone();
-	newAccessory.Name = accessory.Name
-	local accessoryIdValue = accessory:FindFirstChild("AccessoryId")
-	local newAttachment = newAccessory.Handle.HairAttachment
-	local currentAttachment = accessoryHandle:FindFirstChildOfClass("Attachment")
-	if not currentAttachment then
-		warn("Could not convert MeshPart accessory without an attachment:", accessory.Name)
-		accessory:Destroy()
-		newAccessory:Destroy()
-		return nil
-	end
-	newAttachment.Name = currentAttachment.Name
-	newAttachment.Position = currentAttachment.Position
-	local mesh = newAccessory.Handle:FindFirstChildOfClass("SpecialMesh")
-	local currentMesh = accessory.Handle.MeshId
-	local currentTexture = GetMeshPartTextureId(accessory.Handle)
-
-	newAccessory.AttachmentForward = accessory.AttachmentForward
-	newAccessory.AttachmentPos = accessory.AttachmentPos
-	newAccessory.AttachmentRight = accessory.AttachmentRight
-	newAccessory.AttachmentUp = accessory.AttachmentUp
-
-	--newAccessory.Handle.OriginalSize.Value = accessory.Handle.OriginalSize.Value
-
-	local NewAttachment = newAccessory.Handle:FindFirstChildOfClass("Attachment")
-	NewAttachment.Name = currentAttachment.Name
-	NewAttachment.Axis = currentAttachment.Axis
-	NewAttachment.SecondaryAxis = currentAttachment.SecondaryAxis
-	NewAttachment.Position = currentAttachment.Position
-	NewAttachment.Orientation = currentAttachment.Orientation
-
-
-	mesh.MeshId = currentMesh
-	if currentTexture ~= "" then
-		mesh.TextureId = currentTexture
-	end
-	warn("Converted MeshPart accessory values:", accessory.Name, currentMesh, currentTexture)
-
-	if accessoryIdValue then
-		accessoryIdValue:Clone().Parent = newAccessory
-	end
-
-	accessory:Destroy();
-	newAccessory.Parent = workspace;
-	playerCharacter.Humanoid:AddAccessory(newAccessory)
-	return newAccessory
+	return AccessoryConversion.ConvertToSpecialMesh(playerCharacter, accessory, DefaultAccessory)
 end
 
 local function FindToolFromItem(player, accessory)
