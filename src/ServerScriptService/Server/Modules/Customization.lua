@@ -66,6 +66,7 @@ local AccessoryEditService = require(CustomizationModules:WaitForChild("Accessor
 local CharacterScaleService = require(CustomizationModules:WaitForChild("CharacterScaleService"))
 local SaveDataService = require(CustomizationModules:WaitForChild("SaveDataService"))
 local CustomizationUtil = require(CustomizationModules:WaitForChild("CustomizationUtil"))
+local PlayerIndexService = require(CustomizationModules:WaitForChild("PlayerIndexService"))
 
 local DefaultType = 0.25
 local DefaultProportion = 0
@@ -2482,94 +2483,22 @@ local function NormalizeCharacterAccessories(Character)
 end
 
 function Customization.IndexPlayer(player)
-	if Customization[player.Name] == player and CachedCharacterData[tostring(player.UserId)] ~= nil and CachedPlayerSlotNames[player.UserId] ~= nil then warn("ALREADY HAS SOMEHOW") return end
-	print("Loading character information for new player:", player)
-	Customization[player.Name] = player
-	CachedCharacterData[tostring(player.UserId)] = {}
-	local bigtable = {}
-	local Slots = Constants.BaseSaveSlots
-	local SaveSlots1, SaveSlots2, SaveSlots3 = MarketplaceService:UserOwnsGamePassAsync(player.UserId, 21918073), MarketplaceService:UserOwnsGamePassAsync(player.UserId, 53597806), MarketplaceService:UserOwnsGamePassAsync(player.UserId, 144388696)
-	if SaveSlots1 then
-		Slots = math.clamp(Slots * 2, Slots, Constants.SpecialMaxSaveSlots)
-	end
-	if SaveSlots2 then
-		Slots = math.clamp(Slots * 2, Slots, Constants.SpecialMaxSaveSlots)
-	end
-	if SaveSlots3 then
-		Slots = math.clamp(Slots * 2, Slots, Constants.SpecialMaxSaveSlots)
-	end
-	if vipwhitelist[player.UserId] or GroupVerif.CheckRank(player, "Gamemaster") or RunService:IsStudio() then
-		Slots = Constants.SpecialMaxSaveSlots
-	end
-
-	local success, res = pcall(function()
-		return SlotNameDS:GetAsync(player.UserId)
-	end)
-	if success then
-		if res == nil then
-			warn("Player is not using the more efficient PlayerSlotName Datastore. Converting now.")
-			for i = 1, Slots do
-				local returnedTable = GETSaveFromSlot(player.UserId, true, i)
-				if returnedTable ~= nil then
-					bigtable[tostring(i)] = nil
-				end
-				bigtable[tostring(i)] = returnedTable
-				wait()
-			end
-			local newTable = {}
-			for i, v in pairs(bigtable) do
-				newTable[i] = v.SlotName
-			end
-			wait(2)
-			local success, res = pcall(function()
-				SlotNameDS:SetAsync(player.UserId, newTable)
-			end)
-			CachedPlayerSlotNames[player.UserId] = newTable
-		else
-			warn("Player is using the PlayerSlotName Datastore. Updating cache.")
-			CachedPlayerSlotNames[player.UserId] = res
-			-- this is just for today
-
-
-		end
-	else
-		warn("Data stores are down!")
-		local gui = script.DatastoresDown:Clone()
-		gui.Parent = player.PlayerGui
-	end
-
-
-	--CachedCharacterData[tostring(player.UserId)] = deepCopy(bigtable)
-	--warn("SAVE DATA:", CachedCharacterData[player.UserId])
-	local returnedLegacySave = GetAllLegacyData(player)
-	if returnedLegacySave then
-		print(player, " has legacy data")
-		CachedLegacyCharacterData[tostring(player.UserId)] = returnedLegacySave
-	end
-
-	player.CharacterAdded:Connect(function(character)
-		task.wait(0.3)
-		warn("CUSTOMIZATON : ", "CHARACTER ADDED", player.Name)
-		NormalizeCharacterAccessories(character)
-	end)
-
-	local function executeRegardless()
-		task.wait(0.3)
-		warn("CUSTOMIZATON : ", "EXECUTE REG.", player.Name)
-		NormalizeCharacterAccessories(player.Character)
-	end
-
-	repeat task.wait() until player.Character
-	executeRegardless()
+	return PlayerIndexService.IndexPlayer(player, Customization, CachedCharacterData, CachedPlayerSlotNames, CachedLegacyCharacterData, {
+		Constants = Constants,
+		MarketplaceService = MarketplaceService,
+		GroupVerif = GroupVerif,
+		RunService = RunService,
+		vipwhitelist = vipwhitelist,
+		SlotNameDS = SlotNameDS,
+		GetSaveFromSlot = GETSaveFromSlot,
+		GetAllLegacyData = GetAllLegacyData,
+		NormalizeCharacterAccessories = NormalizeCharacterAccessories,
+		DatastoresDownGui = script.DatastoresDown,
+	})
 end
 
 game.Players.PlayerRemoving:Connect(function(player)
-	Customization[player.Name] = false
-	Customization[player.Name] = nil
-	CachedCharacterData[tostring(player.UserId)] = nil
-	CachedLegacyCharacterData[player.UserId] = nil
-	SlotNameDS:SetAsync(player.UserId, CachedPlayerSlotNames[player.UserId])
-	CachedPlayerSlotNames[player.UserId] = nil
+	PlayerIndexService.RemovePlayer(player, Customization, CachedCharacterData, CachedLegacyCharacterData, CachedPlayerSlotNames, SlotNameDS)
 end)
 
 CustomizingEvent.OnServerEvent:Connect(function(client, Arg)
