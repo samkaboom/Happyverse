@@ -64,6 +64,7 @@ local CharacterInfoService = require(CustomizationModules:WaitForChild("Characte
 local FaceService = require(CustomizationModules:WaitForChild("FaceService"))
 local AccessoryEditService = require(CustomizationModules:WaitForChild("AccessoryEditService"))
 local CharacterScaleService = require(CustomizationModules:WaitForChild("CharacterScaleService"))
+local SaveDataService = require(CustomizationModules:WaitForChild("SaveDataService"))
 
 local DefaultType = 0.25
 local DefaultProportion = 0
@@ -119,115 +120,21 @@ local function IsOccupiedSkills(SkillsValueSlot)
 end
 
 local function GETSaveFromSlot(UserId, ForceTrueGET, Slot)
-	print("GET SAVE", UserId, "FORCETRUEGET?", ForceTrueGET, Slot)
-	local success, response = pcall(function()
-		local returned
-		if ForceTrueGET then
-			print("Getting forced new data for", UserId, "at slot", Slot)
-			returned = NewSlots:GetAsync(tostring(UserId) .. "_" .. tostring(Slot))
-			if returned then
-				returned = DeserializeTable(returned)
-				return returned
-			else
-				warn(returned)
-				return returned
-			end
-		else
-
-			local function Execute()
-				print("Getting forced new data for", UserId, "at slot", Slot)
-				returned = NewSlots:GetAsync(tostring(UserId) .. "_" .. tostring(Slot))
-				if returned then
-					returned = DeserializeTable(returned)
-					CachedCharacterData[tostring(UserId)][tostring(Slot)] = returned
-					return returned
-				else
-					warn(returned)
-					return returned
-				end
-			end
-
-
-			warn("cache slot:",CachedCharacterData[tostring(UserId)][tostring(Slot)])
-			if CachedCharacterData[tostring(UserId)] == nil then print("No UserId slot"); return Execute() end
-			if CachedCharacterData[tostring(UserId)][tostring(Slot)] == nil then print("No slot in general.");  return Execute() else
-
-				return DeserializeTable(CachedCharacterData[tostring(UserId)][tostring(Slot)])
-			end
-		end
-	end)
-
-	if success then 
-		return response
-	else
-		warn(response)
-		return false
-	end
-
+	return SaveDataService.GetSaveFromSlot(UserId, ForceTrueGET, Slot, NewSlots, CachedCharacterData, DeserializeTable)
 end
 
 
 local function GETLegacySave(Client)
-	local v = CachedLegacyCharacterData[tostring(Client.UserId)]
-	if v then	
-		return v
-	else 
-		return false
-	end
+	return SaveDataService.GetLegacySave(Client, CachedLegacyCharacterData)
 end
 
 local function GetAllLegacyData(Client)
-	print("getting all data")
-	local bigTable = {}
-	local found = false
-	for i = 1, 24, 1 do
-		wait()
-
-		local CharacterInfoDS = DataStoreService:GetDataStore(CurrentLegacyDataStore .. tostring(i))
-		local result, value = pcall(function()
-
-			local v = CharacterInfoDS:GetAsync(Client.UserId)
-
-			return v
-		end)
-
-		if result == false then
-			warn("Data store isn't working!")
-			return false
-		end
-
-		if value then 
-
-			local Value = HttpService:JSONDecode(value)
-			bigTable[i] = Value
-			found = true
-		else
-			bigTable[i] = false
-		end
-	end
-	wait()
-	if found == false then
-		return false
-	else
-		return bigTable
-	end
+	return SaveDataService.GetAllLegacyData(Client, DataStoreService, CurrentLegacyDataStore, HttpService)
 end
 
 
 local function POSTSave(UserId, Table, Slot, IgnoreCache) -- loading
-	local success, response = pcall(function()
-		local ActualTable = SerializeTable(Table)
-		warn("POSTING NOW", UserId, Slot)
-		NewSlots:SetAsync(tostring(UserId) .. "_" .. tostring(Slot), ActualTable)
-
-		if CachedCharacterData[tostring(UserId)] == nil then CachedCharacterData[tostring(UserId)] = {}; print("Had no cached data so POSTSave made it") end
-		if IgnoreCache == nil or IgnoreCache == false then CachedCharacterData[tostring(UserId)][tostring(Slot)] = Table end
-		CachedPlayerSlotNames[UserId][tostring(Slot)] = Table.SlotName
-		return Table
-	end)
-
-	if success then return true else warn(response) return false end
-
+	return SaveDataService.PostSave(UserId, Table, Slot, IgnoreCache, NewSlots, CachedCharacterData, CachedPlayerSlotNames, SerializeTable)
 end
 
 local SerializeVector3 = Serialization.SerializeVector3
@@ -2564,22 +2471,10 @@ local Customization = {
 		end
 	end,
 	Tutorial = function(self, Player)
-		local success, res = pcall(function()
-			return TutorialDataStore:GetAsync(Player.UserId)
-		end)
-		if success then
-			if res == nil then res = false end
-			return res
-		else
-			return true
-		end
+		return SaveDataService.GetTutorial(Player, TutorialDataStore)
 	end,
 	SetTutorial = function(self, Player, val)
-		local success, res = pcall(function()
-			TutorialDataStore:SetAsync(Player.UserId, val)
-			return
-		end)
-		return true
+		return SaveDataService.SetTutorial(Player, val, TutorialDataStore)
 	end
 }
 
