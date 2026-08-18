@@ -1,0 +1,14 @@
+{
+  "sourcePlace": "place/R15Customizer.rbxl",
+  "sourcePlaceSha256": "9687aa16034024f83a441200b62463bcffc85634397e2d87e59f5c7eaeaf8949",
+  "scriptsExtracted": 67,
+  "scriptsVerified": 67,
+  "hashVerification": "PASS",
+  "counts": {
+    "ModuleScript": 29,
+    "Script": 9,
+    "LocalScript": 29
+  },
+  "totalSourceLines": 25598,
+  "totalSourceBytes": 830103
+}
