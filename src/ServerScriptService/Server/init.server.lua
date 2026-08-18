@@ -469,184 +469,104 @@ local OOCTbValues = {}
 
 -- Remote Functions
 
-CustomizationInvoke.OnServerInvoke = function(player, requestType, ...)
-	repeat wait() until Multiverse and Customization
-	print("CUSTOMIZATION INVOKE: ", player, "TYPE:", requestType)
-	
-	if requestType == "NameBio" then
-		LastBioChangeProcess(player)
-		local returned = Customization:NameBio(player, ...)
-		return returned 
-	elseif requestType == "Shirt" then
-		local returned = Customization:Shirt(player, ...)
-		return returned
-	elseif requestType == "Pants" then
-		local returned = Customization:Pants(player,...)
-		return returned
-	elseif requestType == "Face" then
-		local returned = Customization:Face(player,...)
-		return returned
-	elseif requestType == "Color" then
-		local returned = Customization:Color(player, ...)
-		return returned
-	elseif requestType == "AColor" then
-		local returned = Customization:AColor(player, ...)
-		return returned
-	elseif requestType == "PColor" then
-		local returned = Customization:PColor(player, ...)
-		return returned
-	elseif requestType == "Height" then
-		LastBioChangeProcess(player)
-		local returned = Customization:Height(player, ...)
-		return returned
-	elseif requestType == "Body" then
-		local returned = Customization:Body(player, ...)
-		return returned
-	elseif requestType == "Proportionalize" then
-		local returned = Customization:Proportionalize(player,...)
-		return returned
-	elseif requestType == "Animations" then
-		local returned = Customization:Animations(player, ...)
-		return returned
-	elseif requestType == "ATransparency" then
-		local returned = Customization:ATransparency(player,...)
-		return returned
-	elseif requestType == "Material" then
-		local returned = Customization:Material(player,...)
-		return returned
-	elseif requestType == "MeshId" then
-		local returned = Customization:MeshId(player,...)
-		return returned
-	elseif requestType == "Particle" then
-		local returned = Customization:Particle(player,...)
-		return returned
-	elseif requestType == "ParticleAdjust" then
-		local returned = Customization:ParticleAdjust(player,...)
-		return returned
-	elseif requestType == "Texture" then
-		local returned = Customization:Texture(player,...)
-		return returned
-	elseif requestType == "Position" then
-		local returned = Customization:Position(player,...)
-		return returned
-	elseif requestType == "Size" then
-		local returned = Customization:Size(player,...)
-		return returned
-	elseif requestType == "Rotation" then
-		local returned = Customization:Rotation(player,...)
-		return returned
-	elseif requestType == "AddAccessory" then
-		local returned = Customization:AddAccessory(player,...)
-		return returned
-	elseif requestType == "BlankAccessory" then
-		local returned = Customization:BlankAccessory(player,...)
-		return returned
-	elseif requestType == "Revert" then
-		local returned = Customization:Revert(player,...)
-		return returned
-	elseif requestType == "Delete" then
-		local returned = Customization:Delete(player,...)
-		return returned
-	elseif requestType == "Copy" then
-		local returned = Customization:Copy(player,...)
-		return returned
-	elseif requestType == "OToggle" then
-		local returned = Customization:OToggle(player, ...)
-		return returned
-	elseif requestType == "OTransparency" then
-		local returned = Customization:OTransparency(player,...)
-		return returned
-	elseif requestType == "Save" then
-		local returned = Customization:Save(player, ...)
-		return returned
-	elseif requestType == "Load" then
-		LastEmpChangeProcess(player)
-		LastBioChangeProcess(player)
-		local returned = Customization:Load(player, ...)
-		return returned
-	elseif requestType == "RestoreAccessoryHistory" then
-		LastEmpChangeProcess(player)
-		LastBioChangeProcess(player)
-		local returned = Customization:RestoreAccessoryHistory(player, ...)
-		return returned
-	elseif requestType == "LoadLegacy" then
-		LastEmpChangeProcess(player)
-		LastBioChangeProcess(player)
-		local returned = Customization:LoadLegacy(player, ...)
-		return returned
-	elseif requestType == "AllData" then
-		local returned = Customization:AllData(player, ...)
-		return returned
-	elseif requestType == "AllLegacyData" then
-		local returned = Customization:AllLegacyData(player, ...)
-		return returned
-	elseif requestType == "WeldPart" then
-		local returned = Customization:WeldPart(player,...)
-		return returned
-	elseif requestType == "MirrorAccessory" then
-		local returned = Customization:MirrorAccessory(player,...)
-		return returned
-	elseif requestType == "LimbRemover" then
-		local returned = Customization:LimbRemover(player,...)
-		return returned
-	elseif requestType == "SaveOutfitID" then
-		local returned = Customization:SaveOutfitID(player,...)
-		return returned
-	elseif requestType == "LoadOutfitID" then
-		LastEmpChangeProcess(player)
-		LastBioChangeProcess(player)
-		local returned = Customization:LoadOutfitID(player,...)
-		return returned
-	elseif requestType == "SaveAccessoryID" then
-		local returned = Customization:SaveAccessoryID(player,...)
-		return returned
-	elseif requestType == "LoadAccessoryID" then
-		local returned = Customization:LoadAccessoryID(player,...)
-		return returned
-	elseif  requestType == "Empowerment" then
-		LastEmpChangeProcess(player)
-		local returned = Customization:Empowerment(player,...)
-		return returned
-	elseif  requestType == "Skill" then
-		LastEmpChangeProcess(player)
-		local returned = Customization:Skill(player,...)
-		return returned
-	elseif requestType == "OOC" then
-		
-		local function ToggleOOC(val)
-			print(player.Name, "OOC", val)
-			if val == true then
-				OOCTbValues[player.UserId] = {}
-				local tb = OOCTbValues[player.UserId]
-				for i, v in pairs(player.Character:GetDescendants()) do
-					if v:IsA("BasePart") then
-						if v.Transparency < 1 then
-						
-						table.insert(tb, {v, v.Transparency})
-						
-							v.Transparency = 0.9
-						end
-					end
-				end
-			else
-				local tb = OOCTbValues[player.UserId]
-				for i, v in pairs(tb) do
-					v[1].Transparency = v[2]
+local CustomizationRequestHandlers = {
+	NameBio = {method = "NameBio", updateBio = true},
+	Shirt = {method = "Shirt"},
+	Pants = {method = "Pants"},
+	Face = {method = "Face"},
+	Color = {method = "Color"},
+	AColor = {method = "AColor"},
+	PColor = {method = "PColor"},
+	Height = {method = "Height", updateBio = true},
+	Body = {method = "Body"},
+	Proportionalize = {method = "Proportionalize"},
+	Animations = {method = "Animations"},
+	ATransparency = {method = "ATransparency"},
+	Material = {method = "Material"},
+	MeshId = {method = "MeshId"},
+	Particle = {method = "Particle"},
+	ParticleAdjust = {method = "ParticleAdjust"},
+	Texture = {method = "Texture"},
+	Position = {method = "Position"},
+	Size = {method = "Size"},
+	Rotation = {method = "Rotation"},
+	AddAccessory = {method = "AddAccessory"},
+	BlankAccessory = {method = "BlankAccessory"},
+	Revert = {method = "Revert"},
+	Delete = {method = "Delete"},
+	Copy = {method = "Copy"},
+	OToggle = {method = "OToggle"},
+	OTransparency = {method = "OTransparency"},
+	Save = {method = "Save"},
+	Load = {method = "Load", updateBio = true, updateEmp = true},
+	RestoreAccessoryHistory = {method = "RestoreAccessoryHistory", updateBio = true, updateEmp = true},
+	LoadLegacy = {method = "LoadLegacy", updateBio = true, updateEmp = true},
+	AllData = {method = "AllData"},
+	AllLegacyData = {method = "AllLegacyData"},
+	WeldPart = {method = "WeldPart"},
+	MirrorAccessory = {method = "MirrorAccessory"},
+	LimbRemover = {method = "LimbRemover"},
+	SaveOutfitID = {method = "SaveOutfitID"},
+	LoadOutfitID = {method = "LoadOutfitID", updateBio = true, updateEmp = true},
+	SaveAccessoryID = {method = "SaveAccessoryID"},
+	LoadAccessoryID = {method = "LoadAccessoryID"},
+	Empowerment = {method = "Empowerment", updateEmp = true},
+	Skill = {method = "Skill", updateEmp = true},
+	AddItem = {method = "AddItem"},
+	Tutorial = {method = "Tutorial"},
+	SetTutorial = {method = "SetTutorial"}
+}
+
+local function ToggleOOC(player, val)
+	print(player.Name, "OOC", val)
+	if val == true then
+		OOCTbValues[player.UserId] = {}
+		local tb = OOCTbValues[player.UserId]
+		for i, v in pairs(player.Character:GetDescendants()) do
+			if v:IsA("BasePart") then
+				if v.Transparency < 1 then
+					table.insert(tb, {v, v.Transparency})
+					v.Transparency = 0.9
 				end
 			end
 		end
-		ToggleOOC(...)
-		return true
-	elseif requestType == "AddItem" then
-		local returned = Customization:AddItem(player,...)
-		return returned
-	elseif requestType == "Tutorial" then
-		local returned = Customization:Tutorial(player,...)
-		return returned
-	elseif requestType == "SetTutorial" then
-		local returned = Customization:SetTutorial(player,...)
-		return returned
+	else
+		local tb = OOCTbValues[player.UserId]
+		for i, v in pairs(tb) do
+			v[1].Transparency = v[2]
+		end
 	end
+end
+
+CustomizationInvoke.OnServerInvoke = function(player, requestType, ...)
+	repeat wait() until Multiverse and Customization
+	print("CUSTOMIZATION INVOKE: ", player, "TYPE:", requestType)
+
+	if requestType == "OOC" then
+		ToggleOOC(player, ...)
+		return true
+	end
+
+	local handler = CustomizationRequestHandlers[requestType]
+	if not handler then
+		warn("Unknown customization request type:", requestType)
+		return nil
+	end
+
+	if handler.updateEmp then
+		LastEmpChangeProcess(player)
+	end
+	if handler.updateBio then
+		LastBioChangeProcess(player)
+	end
+
+	local method = Customization[handler.method]
+	if type(method) ~= "function" then
+		warn("Missing customization handler method:", handler.method)
+		return nil
+	end
+
+	return method(Customization, player, ...)
 end
 
 

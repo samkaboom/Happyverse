@@ -50,6 +50,8 @@ local HttpService = game:GetService("HttpService")
 local ServerAssets = script.Parent.Parent:WaitForChild("ServerAssets")
 local DefaultAccessory = ServerAssets:WaitForChild("Custom Accessory")
 local ParticlesFolder = script:WaitForChild("Particles")
+local CustomizationModules = script.Parent:WaitForChild("CustomizationModules")
+local Serialization = require(CustomizationModules:WaitForChild("Serialization"))
 
 local DefaultType = 0.25
 local DefaultProportion = 0
@@ -323,76 +325,14 @@ local function POSTSave(UserId, Table, Slot, IgnoreCache) -- loading
 
 end
 
-local function SerializeVector3(Value)
-	return {
-		["X"] = Value.X,
-		["Y"] = Value.Y,
-		["Z"] = Value.Z
-	}
-end
-
-local function DeserializeVector3(Value)
-	return Vector3.new(Value.X, Value.Y, Value.Z)
-end
-
-local function SerializeColor3(Value)
-	return {
-		["R"] = Value.R,
-		["G"] = Value.G,
-		["B"] = Value.B
-	}
-end
-
-local function DeserializeColor3(Value)
-	return Color3.new(Value.R, Value.G, Value.B)
-end
-
-local function SerializeCFrame(Value)
-	local x, y, z, R00, R01, R02, R10, R11, R12, R20, R21, R22 = Value:GetComponents()
-	return {
-		["X"] = x,
-		["Y"] = y,
-		["Z"] = z,
-		["R00"] = R00,
-		["R01"] = R01,
-		["R02"] = R02,
-		["R10"] = R10,
-		["R11"] = R11,
-		["R12"] = R12,
-		["R20"] = R20,
-		["R21"] = R21,
-		["R22"] = R22
-	}
-end
-
-local function DeserializeCFrame(Value)
-	return CFrame.new(
-		Value.X, Value.Y, Value.Z,
-		Value.R00, Value.R01, Value.R02,
-		Value.R10, Value.R11, Value.R12,
-		Value.R20, Value.R21, Value.R22
-	)
-end
-
-local function SerializeMaterial(Value)
-	if Value == Enum.Material.ForceField then
-		return "Electric"
-	elseif Value == Enum.Material.Metal then
-		return "Metal"
-	else
-		return "Default"
-	end
-end
-
-local function DeserializeMaterial(Value)
-	if Value == "Electric" then
-		return Enum.Material.ForceField
-	elseif Value == "Metal" then
-		return Enum.Material.Metal
-	else
-		return Enum.Material.Plastic
-	end
-end
+local SerializeVector3 = Serialization.SerializeVector3
+local DeserializeVector3 = Serialization.DeserializeVector3
+local SerializeColor3 = Serialization.SerializeColor3
+local DeserializeColor3 = Serialization.DeserializeColor3
+local SerializeCFrame = Serialization.SerializeCFrame
+local DeserializeCFrame = Serialization.DeserializeCFrame
+local SerializeMaterial = Serialization.SerializeMaterial
+local DeserializeMaterial = Serialization.DeserializeMaterial
 
 local function SerializeParticleData(AccessoryTable)
 	if AccessoryTable.Particle == nil then
