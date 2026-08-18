@@ -65,6 +65,7 @@ local FaceService = require(CustomizationModules:WaitForChild("FaceService"))
 local AccessoryEditService = require(CustomizationModules:WaitForChild("AccessoryEditService"))
 local CharacterScaleService = require(CustomizationModules:WaitForChild("CharacterScaleService"))
 local SaveDataService = require(CustomizationModules:WaitForChild("SaveDataService"))
+local CustomizationUtil = require(CustomizationModules:WaitForChild("CustomizationUtil"))
 
 local DefaultType = 0.25
 local DefaultProportion = 0
@@ -100,23 +101,11 @@ local function ConvertToSpecialMesh(playerCharacter, accessory)
 end
 
 local function FindToolFromItem(player, accessory)
-	for i, tool in pairs(player.Backpack:GetChildren()) do
-		if tool:FindFirstChild("AssociatedObject") then
-			if tool.AssociatedObject.Value == accessory then
-				return tool
-			end
-		end
-	end
+	return CustomizationUtil.FindToolFromItem(player, accessory)
 end
 
 local function IsOccupiedSkills(SkillsValueSlot)
-	local found = false
-	for z, v in pairs(SkillsValueSlot) do
-		warn("FOUND!")
-		found = true
-		break
-	end
-	return found
+	return CustomizationUtil.IsOccupiedSkills(SkillsValueSlot)
 end
 
 local function GETSaveFromSlot(UserId, ForceTrueGET, Slot)
@@ -1069,14 +1058,7 @@ local function LimbRemover(Client, LimbToRemove, Transparency)
 end
 
 function deepCopy(original)
-	local copy = {}
-	for k, v in pairs(original) do
-		if type(v) == "table" then
-			v = deepCopy(v)
-		end
-		copy[k] = v
-	end
-	return copy
+	return CustomizationUtil.DeepCopy(original)
 end
 
 local function LoadLegacyCharacterSlot(Client, Slot, value)
@@ -1386,7 +1368,7 @@ end
 
 
 function round(n)
-	return math.round(n * 100) / 100
+	return CustomizationUtil.Round(n)
 end
 
 local function ValidateAccessoryOwner(Player, Accessory)
