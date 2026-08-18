@@ -156,11 +156,6 @@ local function GetMeshPartTextureId(handle)
 		return textureId
 	end
 
-	local surfaceAppearance = handle:FindFirstChildOfClass("SurfaceAppearance")
-	if surfaceAppearance and surfaceAppearance.ColorMap ~= "" then
-		return surfaceAppearance.ColorMap
-	end
-
 	for i, descendant in pairs(handle:GetDescendants()) do
 		if descendant:IsA("Texture") or descendant:IsA("Decal") then
 			if descendant.Texture and descendant.Texture ~= "" then
@@ -2742,7 +2737,6 @@ local Customization = {
 				newVal.Parent = result
 			end
 			if result.Handle:IsA("MeshPart") and not result.Handle:FindFirstChildOfClass("WrapLayer") then
-				result.Parent = workspace
 				result = ConvertToSpecialMesh(Player.Character, result)
 				if not result then return false end
 
