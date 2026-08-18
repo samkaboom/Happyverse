@@ -63,6 +63,7 @@ local LimbService = require(CustomizationModules:WaitForChild("LimbService"))
 local CharacterInfoService = require(CustomizationModules:WaitForChild("CharacterInfoService"))
 local FaceService = require(CustomizationModules:WaitForChild("FaceService"))
 local AccessoryEditService = require(CustomizationModules:WaitForChild("AccessoryEditService"))
+local CharacterScaleService = require(CustomizationModules:WaitForChild("CharacterScaleService"))
 
 local DefaultType = 0.25
 local DefaultProportion = 0
@@ -1763,137 +1764,32 @@ local Customization = {
 	end,
 
 	Height = function(self, Player, Value, CharacterTable)
-		print(Player, Value)
 		if self[Player.Name] then
-
-			local Character = Player.Character
-			local Humanoid = Character.Humanoid
-			if Humanoid.BodyHeightScale.Value ~= Value then
-				Humanoid.BodyHeightScale.Value = Value
-				CharacterTable.Scale.Height = Value
-				local NewTable = self:FixAccessories(Player, CharacterTable)
-				return NewTable
-			else
-				return CharacterTable
-			end
-
+			return CharacterScaleService.SetHeight(Player, Value, CharacterTable, function(player, tableToFix)
+				return self:FixAccessories(player, tableToFix)
+			end)
 		end
 	end,
 
 	Body = function(self, Player, Width, Depth, Head, CharacterTable)
-		print(Player, Width, Depth, Head)
 		if self[Player.Name] then
-			local Character = Player.Character
-			local Humanoid = Character.Humanoid
-			local Change = false
-			if Humanoid.BodyWidthScale.Value ~= Width or Humanoid.BodyDepthScale.Value ~= Depth or Humanoid.HeadScale.Value ~= Head then
-				Change = true
-				print("Change detected")
-			end
-			if Change then
-				Humanoid.BodyWidthScale.Value = Width
-				Humanoid.BodyDepthScale.Value = Depth
-				Humanoid.HeadScale.Value = Head
-
-				CharacterTable.Scale.Head = Head
-				CharacterTable.Scale.Width = Width
-				CharacterTable.Scale.Depth = Depth
-
-				local NewTable = self:FixAccessories(Player, CharacterTable)
-
-				return NewTable
-
-			else
-				return CharacterTable
-			end
+			return CharacterScaleService.SetBody(Player, Width, Depth, Head, CharacterTable, function(player, tableToFix)
+				return self:FixAccessories(player, tableToFix)
+			end)
 		end
 	end,
 
 	Proportionalize = function(self, Player, CharacterTable)
-		print(Player, "Proportionalize")
-		local Character = Player.Character
-		local Humanoid = Character.Humanoid
-		local heightv = Humanoid.BodyHeightScale.Value
-		local width = Humanoid.BodyWidthScale
-		local depth = Humanoid.BodyDepthScale
-		local head = Humanoid.HeadScale
-
-		if depth.Value == heightv * 0.88 and head.Value == heightv * 0.9 and width.Value == heightv*0.86 then return CharacterTable end
-
-		local btype = 0.8
-		local ptype = 1
-
-		width.Value = heightv * 0.86
-		CharacterTable.Scale.Width = width.Value
-		depth.Value = heightv * 0.88
-		CharacterTable.Scale.Depth = depth.Value
-		head.Value = heightv * 0.90
-		CharacterTable.Scale.Head = head.Value
-		Humanoid.BodyProportionScale.Value = DefaultProportion
-		Humanoid.BodyTypeScale.Value = DefaultType
-
-
-		local NewTable = self:FixAccessories(Player, CharacterTable)
-
-		return NewTable
-
+		return CharacterScaleService.Proportionalize(Player, CharacterTable, DefaultProportion, DefaultType, function(player, tableToFix)
+			return self:FixAccessories(player, tableToFix)
+		end)
 	end,
 
 	Animations = function(self, Player, IdleID, WalkID, RunID, CharacterTable)
-		print(Player, IdleID, WalkID, RunID)
 		if self[Player.Name] then
-
-			local function isRealAnimation(shirtid)
-				local suc, ass = pcall(function()
-					local ass1 = InsertService:LoadAsset(shirtid)
-					ass1.Parent = workspace
-					if ass1 then
-						if ass1:FindFirstChildOfClass("Animation") then
-							return true
-						else
-							return false
-						end
-					else
-						return false
-					end
-				end)
-			end
-
-			local success, returned = pcall(function()
-
-				local realIdle, realWalk, realRun = isRealAnimation(IdleID), isRealAnimation(WalkID), isRealAnimation(RunID)
-
-				if realIdle == false or realWalk == false or realRun == false then error("One of the assets are not a real Asset ID.") end
-				local Character = Player.Character
-
-				local Description = Player.Character.Humanoid:GetAppliedDescription()
-				Description.IdleAnimation = IdleID
-				Description.WalkAnimation = WalkID
-				Description.RunAnimation = RunID
-				Description.HeightScale = CharacterTable.Scale.Height
-				Description.HeadScale = CharacterTable.Scale.Head
-				Description.WidthScale = CharacterTable.Scale.Width
-				Description.DepthScale = CharacterTable.Scale.Depth
-				Description.BodyTypeScale = DefaultType
-				Description.ProportionScale = DefaultProportion
-				Description.HeadColor = Character["Body Colors"].HeadColor3
-				Description.TorsoColor = Character["Body Colors"].TorsoColor3
-				Description.LeftArmColor = Character["Body Colors"].LeftArmColor3
-				Description.RightArmColor = Character["Body Colors"].RightArmColor3
-				Description.LeftLegColor = Character["Body Colors"].LeftLegColor3
-				Description.RightLegColor = Character["Body Colors"].RightLegColor3
-
-				Player.Character.Humanoid:ApplyDescription(Description)
-
-				CharacterTable["Animations"]["RunAnimation"] = RunID
-				CharacterTable["Animations"]["IdleAnimation"] = IdleID
-				CharacterTable["Animations"]["WalkAnimation"] = WalkID
-				CharacterTable = self:FixAccessories(Player, CharacterTable)
+			return CharacterScaleService.SetAnimations(Player, IdleID, WalkID, RunID, CharacterTable, InsertService, DefaultProportion, DefaultType, function(player, tableToFix)
+				return self:FixAccessories(player, tableToFix)
 			end)
-
-			if not success then warn(returned) return false end
-
-			return CharacterTable
 		end
 	end,
 	ATransparency = function(self,Player,UpdateTable,Value)
