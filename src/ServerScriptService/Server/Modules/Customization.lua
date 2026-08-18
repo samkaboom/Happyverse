@@ -61,6 +61,7 @@ local AccessoryTransform = require(CustomizationModules:WaitForChild("AccessoryT
 local ClothingService = require(CustomizationModules:WaitForChild("ClothingService"))
 local LimbService = require(CustomizationModules:WaitForChild("LimbService"))
 local CharacterInfoService = require(CustomizationModules:WaitForChild("CharacterInfoService"))
+local FaceService = require(CustomizationModules:WaitForChild("FaceService"))
 
 local DefaultType = 0.25
 local DefaultProportion = 0
@@ -1709,40 +1710,10 @@ local Customization = {
 
 	Face2 = function(self, Player, ID)
 		if self[Player.Name] then
-
-			local function isRealFace(Pantsid)
-				local suc, ass = pcall(function()
-					local ass1 = InsertService:LoadAsset(Pantsid)
-					ass1.Parent = workspace
-					if ass1 then
-						if ass1:FindFirstChildOfClass("Decal") then
-							print("ITS A FACE")
-							local b = ass1:FindFirstChildOfClass("Decal").Texture
-							ass1:Destroy()
-							return b
-						else
-							return false
-						end
-					else
-						return false
-					end
-				end)
-
-				if suc then
-					if ass then
-						return ass
-					else
-
-						return false
-					end
-				else
-					return false
-				end
-			end
-			local result = isRealFace(ID)
+			local result = FaceService.GetFaceTextureFromDecalAsset(ID, InsertService)
 
 			if result == false or result == nil then return false end
-			Player.Character.Head.face.Texture = result
+			FaceService.SetFaceTexture(Player.Character, result)
 			return result
 		end
 	end,
@@ -1750,9 +1721,9 @@ local Customization = {
 	Face = function(self, Player, ID)
 		if self[Player.Name] then
 
-			local newID = "rbxthumb://type=Asset&id=" .. tostring(ID) .. "&w=420&h=420"
+			local newID = FaceService.GetThumbnailFaceTexture(ID)
 
-			Player.Character.Head.face.Texture = newID
+			FaceService.SetFaceTexture(Player.Character, newID)
 			return ID
 		end
 	end,
