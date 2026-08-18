@@ -151,7 +151,7 @@ local function ChangeOverlay(Accessory : Accessory, Transparency : number, Color
 end
 
 local function GetMeshPartTextureId(handle)
-	local textureId = handle.TextureID
+	local textureId = handle.TextureID or ""
 	if textureId and textureId ~= "" then
 		return textureId
 	end
@@ -169,7 +169,7 @@ local function GetMeshPartTextureId(handle)
 		end
 	end
 
-	return textureId
+	return ""
 end
 
 local function ConvertToSpecialMesh(playerCharacter, accessory)
@@ -181,6 +181,12 @@ local function ConvertToSpecialMesh(playerCharacter, accessory)
 	local accessoryIdValue = accessory:FindFirstChild("AccessoryId")
 	local newAttachment = newAccessory.Handle.HairAttachment
 	local currentAttachment = accessoryHandle:FindFirstChildOfClass("Attachment")
+	if not currentAttachment then
+		warn("Could not convert MeshPart accessory without an attachment:", accessory.Name)
+		accessory:Destroy()
+		newAccessory:Destroy()
+		return nil
+	end
 	newAttachment.Name = currentAttachment.Name
 	newAttachment.Position = currentAttachment.Position
 	local mesh = newAccessory.Handle:FindFirstChildOfClass("SpecialMesh")
@@ -203,7 +209,9 @@ local function ConvertToSpecialMesh(playerCharacter, accessory)
 
 
 	mesh.MeshId = currentMesh
-	mesh.TextureId = currentTexture
+	if currentTexture ~= "" then
+		mesh.TextureId = currentTexture
+	end
 	warn("Converted MeshPart accessory values:", accessory.Name, currentMesh, currentTexture)
 
 	if accessoryIdValue then
@@ -2736,6 +2744,7 @@ local Customization = {
 			if result.Handle:IsA("MeshPart") and not result.Handle:FindFirstChildOfClass("WrapLayer") then
 				result.Parent = workspace
 				result = ConvertToSpecialMesh(Player.Character, result)
+				if not result then return false end
 
 				task.wait()
 
