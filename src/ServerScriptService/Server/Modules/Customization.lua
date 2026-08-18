@@ -67,6 +67,7 @@ local CharacterScaleService = require(CustomizationModules:WaitForChild("Charact
 local SaveDataService = require(CustomizationModules:WaitForChild("SaveDataService"))
 local CustomizationUtil = require(CustomizationModules:WaitForChild("CustomizationUtil"))
 local PlayerIndexService = require(CustomizationModules:WaitForChild("PlayerIndexService"))
+local BodyColorService = require(CustomizationModules:WaitForChild("BodyColorService"))
 
 local DefaultType = 0.25
 local DefaultProportion = 0
@@ -1621,22 +1622,8 @@ local Customization = {
 	end,
 
 	Color = function(self, Player, BodyPart, Color)
-		print(Player, BodyPart, Color)
 		if self[Player.Name] then
-
-			local bc = Player.Character:FindFirstChild("Body Colors")
-			if BodyPart == "All" then
-				bc["HeadColor3"] = Color
-				bc["TorsoColor3"] = Color
-				bc["LeftLegColor3"] = Color
-				bc["RightLegColor3"] = Color
-				bc["LeftArmColor3"] = Color
-				bc["RightArmColor3"] = Color
-			else
-				bc[BodyPart .. "Color3"] = Color
-			end
-
-			return Color
+			return BodyColorService.SetBodyColor(Player, BodyPart, Color)
 		end
 	end,
 
