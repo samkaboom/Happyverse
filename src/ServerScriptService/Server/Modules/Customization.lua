@@ -60,6 +60,7 @@ local ValidationService = require(CustomizationModules:WaitForChild("ValidationS
 local AccessoryTransform = require(CustomizationModules:WaitForChild("AccessoryTransform"))
 local ClothingService = require(CustomizationModules:WaitForChild("ClothingService"))
 local LimbService = require(CustomizationModules:WaitForChild("LimbService"))
+local CharacterInfoService = require(CustomizationModules:WaitForChild("CharacterInfoService"))
 
 local DefaultType = 0.25
 local DefaultProportion = 0
@@ -1662,52 +1663,18 @@ local Customization = {
 
 	NameBio = function(self, Player, NameBioTable)
 		if self[Player.Name] then
-			--Player = self[Player.Name]
-			local Folder = ReplicatedStorage.Info[Player.Name]
-
-			NameBioTable.Name = GetFilteredBroadcastText(TextService:FilterStringAsync(NameBioTable.Name, Player.UserId))
-			NameBioTable.Bio = GetFilteredBroadcastText(TextService:FilterStringAsync(NameBioTable.Bio, Player.UserId))
-			if NameBioTable.Name == false or NameBioTable.Bio == false then return false end
-
-			Folder.CName.Value = NameBioTable.Name
-			Folder.CBio.Value = NameBioTable.Bio
-			Folder.CImage.Value = NameBioTable.Image
-			wait()
-			return NameBioTable
+			return CharacterInfoService.SetNameBio(Player, NameBioTable, ReplicatedStorage.Info, TextService, GetFilteredBroadcastText)
 		end
 	end,
 
 	Empowerment = function(self, Player, EmpowermentTable, filter)
 		if self[Player.Name] then
-			warn(Player, EmpowermentTable, filter)
-			local Folder = ReplicatedStorage.Info[Player.Name]
-
-			if filter then
-				EmpowermentTable.Description = GetFilteredBroadcastText(TextService:FilterStringAsync(EmpowermentTable.Description, Player.UserId))
-				EmpowermentTable.Title = GetFilteredBroadcastText(TextService:FilterStringAsync(EmpowermentTable.Title, Player.UserId))
-				if EmpowermentTable.Description == false or EmpowermentTable.Title == false then return false end
-			end
-
-			Folder.EmpowermentType.Value = EmpowermentTable.Type
-			Folder.Empowerment.Value = EmpowermentTable.Description
-			Folder.EmpowermentTitle.Value = EmpowermentTable.Title
-			return EmpowermentTable
+			return CharacterInfoService.SetEmpowerment(Player, EmpowermentTable, filter, ReplicatedStorage.Info, TextService, GetFilteredBroadcastText)
 		end
 	end,
 
 	Skill = function(self, Player, SkillTable, filter, slot)
-		local Folder = ReplicatedStorage.Info[Player.Name]
-
-		if filter then
-			SkillTable.Description = GetFilteredBroadcastText(TextService:FilterStringAsync(SkillTable.Description, Player.UserId))
-			SkillTable.Title = GetFilteredBroadcastText(TextService:FilterStringAsync(SkillTable.Title, Player.UserId))
-			if SkillTable.Description == false or SkillTable.Title == false then return false end
-		end
-
-		Folder["Skill" .. tostring(slot) .. "Type"].Value = SkillTable.Type
-		Folder["Skill" .. tostring(slot) .. "Description"].Value = SkillTable.Description
-		Folder["Skill" .. tostring(slot) .. "Title"].Value = SkillTable.Title
-		return SkillTable
+		return CharacterInfoService.SetSkill(Player, SkillTable, filter, slot, ReplicatedStorage.Info, TextService, GetFilteredBroadcastText)
 	end,
 
 	Shirt = function(self, Player, newShirtID, AccessoryTable)
