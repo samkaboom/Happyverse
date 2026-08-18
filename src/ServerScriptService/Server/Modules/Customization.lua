@@ -57,6 +57,7 @@ local OverlayService = require(CustomizationModules:WaitForChild("OverlayService
 local ParticleService = require(CustomizationModules:WaitForChild("ParticleService"))
 local AccessoryScaling = require(CustomizationModules:WaitForChild("AccessoryScaling"))
 local ValidationService = require(CustomizationModules:WaitForChild("ValidationService"))
+local AccessoryTransform = require(CustomizationModules:WaitForChild("AccessoryTransform"))
 
 local DefaultType = 0.25
 local DefaultProportion = 0
@@ -1526,62 +1527,14 @@ local function ValidateAccessoryOwner(Player, Accessory)
 	return ValidationService.ValidateAccessoryOwner(Player, Accessory)
 end
 
-local OppositeBodyParts = {
-	LeftUpperArm = "RightUpperArm",
-	RightUpperArm = "LeftUpperArm",
-	LeftLowerArm = "RightLowerArm",
-	RightLowerArm = "LeftLowerArm",
-	LeftHand = "RightHand",
-	RightHand = "LeftHand",
-	LeftUpperLeg = "RightUpperLeg",
-	RightUpperLeg = "LeftUpperLeg",
-	LeftLowerLeg = "RightLowerLeg",
-	RightLowerLeg = "LeftLowerLeg",
-	LeftFoot = "RightFoot",
-	RightFoot = "LeftFoot",
-	LeftArm = "RightArm",
-	RightArm = "LeftArm",
-	LeftLeg = "RightLeg",
-	RightLeg = "LeftLeg",
-}
-
-local function MirrorVectorAcrossCharacter(vector)
-	return Vector3.new(-vector.X, vector.Y, vector.Z)
-end
+local OppositeBodyParts = AccessoryTransform.OppositeBodyParts
 
 local function MirrorCFrameAcrossCharacter(cframe)
-	local position = MirrorVectorAcrossCharacter(cframe.Position)
-	local right = cframe.RightVector
-	local up = cframe.UpVector
-	local back = -cframe.LookVector
-
-	return CFrame.fromMatrix(
-		position,
-		Vector3.new(right.X, -right.Y, -right.Z),
-		MirrorVectorAcrossCharacter(up),
-		MirrorVectorAcrossCharacter(back)
-	)
+	return AccessoryTransform.MirrorCFrameAcrossCharacter(cframe)
 end
 
 local function RecalculateAccessoryTransformData(accessoryTable, character)
-	if accessoryTable.IsMeshPart then return end
-	local accessory = accessoryTable.Object
-	local handle = accessory and accessory:FindFirstChild("Handle")
-	if not handle then return end
-
-	local weld = handle:FindFirstChild("AccessoryWeld") or handle:FindFirstChildOfClass("Weld")
-	if not weld or not weld.Part1 then return end
-
-	local originCF = accessoryTable.OriginalC0:Inverse()
-	local currentCF = handle.CFrame
-	local referenceCF = weld.Part1.CFrame * CFrame.new(originCF.Position)
-	local accCF = referenceCF:ToObjectSpace(CFrame.new() + currentCF.Position)
-	accessoryTable.DistanceFromOrigin = Vector3.new(-accCF.Position.X, -accCF.Position.Y, -accCF.Position.Z)
-
-	local originalRx, originalRy, originalRz = accessoryTable.RootRotation.X, accessoryTable.RootRotation.Y, accessoryTable.RootRotation.Z
-	local currentCFInverse = accessoryTable.AccessoryWeld.C0:Inverse()
-	local currentRx, currentRy, currentRz = currentCFInverse:ToEulerAnglesXYZ()
-	accessoryTable.RotationsApplied = Vector3.new(currentRx - originalRx, currentRy - originalRy, currentRz - originalRz)
+	return AccessoryTransform.RecalculateAccessoryTransformData(accessoryTable, character)
 end
 
 local function GetMaxAccessoriesForPlayer(player)
