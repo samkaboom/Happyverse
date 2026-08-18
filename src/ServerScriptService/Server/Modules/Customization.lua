@@ -58,6 +58,7 @@ local ParticleService = require(CustomizationModules:WaitForChild("ParticleServi
 local AccessoryScaling = require(CustomizationModules:WaitForChild("AccessoryScaling"))
 local ValidationService = require(CustomizationModules:WaitForChild("ValidationService"))
 local AccessoryTransform = require(CustomizationModules:WaitForChild("AccessoryTransform"))
+local ClothingService = require(CustomizationModules:WaitForChild("ClothingService"))
 
 local DefaultType = 0.25
 local DefaultProportion = 0
@@ -833,29 +834,7 @@ local function ApplyParticleData(AccessoryTable, Handle)
 end
 
 local function GetClassicClothingTemplate(assetId, className, templateProperty)
-	local success, template = pcall(function()
-		local asset = InsertService:LoadAsset(assetId)
-		if asset then
-			local clothing = asset:FindFirstChildOfClass(className)
-			if clothing then
-				local result = clothing[templateProperty]
-				asset:Destroy()
-				return result
-			else
-				return false
-			end
-		else
-			return false
-		end
-	end)
-
-	if success then
-		if template then
-			return template
-		else
-			return false
-		end
-	end
+	return ClothingService.GetClassicClothingTemplate(assetId, className, templateProperty, InsertService)
 end
 
 function LoadCharacter(Player, SlotData)
