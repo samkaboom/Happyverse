@@ -2108,131 +2108,15 @@ local Customization = {
 	end,
 
 	LoadAccessoryID = function(self, player, ID)
-
-		local success, result = pcall(function()
-			warn("Getting Accessory ID thingy", ID)
-			return AccessoryIDsDataStore:GetAsync(tostring(ID))
-		end)
-		warn("results:", success, result)
-		if success and result then
-			warn(result)
-			local SlotData = DeserializeAccessoryTable(result)
-			local Character = player.Character
-			local AccCount = 0
-			for i, v in pairs(Character:GetChildren()) do
-				if v:IsA("Accessory") then
-					AccCount = AccCount + 1
-				end
-			end
-
-			local max = GetMaxAccessoriesForPlayer(player)
-
-
-			warn("MAX:", max)
-			if (AccCount + #SlotData["Data"]) > max then return false end
-			for i, AccessoryTable in pairs(SlotData["Data"]) do
-				--print("i:", i, "table:", AccessoryTable)
-				if not AccessoryTable.IsMeshPart then
-					if AccessoryTable.DistanceFromOriginC0 then
-						AccessoryTable.DistanceFromOrigin = AccessoryTable.DistanceFromOriginC0
-						AccessoryTable.DistanceFromOriginC0 = nil
-					end
-					local NewAccessory = DefaultAccessory:Clone()
-					NewAccessory.Name = AccessoryTable.Name
-					NewAccessory.AttachmentForward = AccessoryTable.AttachmentForward
-					NewAccessory.AttachmentPos = AccessoryTable.AttachmentPos
-					NewAccessory.AttachmentRight = AccessoryTable.AttachmentRight
-					NewAccessory.AttachmentUp = AccessoryTable.AttachmentUp
-
-					AccessoryTable.Object = NewAccessory
-					NewAccessory.Handle.OriginalSize.Value = AccessoryTable["OriginalSize"]
-
-
-					NewAccessory.Handle.Size = AccessoryTable.HandleSize
-					NewAccessory.Handle.Color = Color3.new(AccessoryTable.Color.X, AccessoryTable.Color.Y, AccessoryTable.Color.Z)
-
-					local NewAttachment = NewAccessory.Handle:FindFirstChildOfClass("Attachment")
-					NewAttachment.Name = AccessoryTable.Attachment.Name
-					NewAttachment.Axis = AccessoryTable.Attachment.Axis
-					NewAttachment.SecondaryAxis = AccessoryTable.Attachment.SecondaryAxis
-					NewAttachment.Position = AccessoryTable.Attachment.Position
-					NewAttachment.Orientation = AccessoryTable.Attachment.Orientation
-
-					local NewMesh = NewAccessory.Handle:FindFirstChildOfClass("SpecialMesh")
-
-					NewMesh.MeshId = AccessoryTable["MeshId"]
-					NewMesh.TextureId = AccessoryTable.TextureId
-					NewMesh.VertexColor = AccessoryTable["Color"]
-					NewMesh.Offset = AccessoryTable.Offset
-					NewMesh.Scale = AccessoryTable.Scale
-
-					NewAccessory.Handle.Transparency = AccessoryTable["Transparency"]
-					NewAccessory.Handle.Material = AccessoryTable.Material
-
-					Character.Humanoid:AddAccessory(NewAccessory)
-
-					local NewWeld = NewAccessory.Handle:FindFirstChildOfClass("Weld")
-					NewWeld.Part1 = Character:FindFirstChild(AccessoryTable["WeldPart"])
-
-					NewMesh.Offset = AccessoryTable.Offset
-					NewMesh.Scale = AccessoryTable.Scale
-
-
-					ApplyParticleData(AccessoryTable, NewAccessory.Handle)
-
-
-					--SlotData.Accessories[i].OriginalC0 = NewAccessory.Handle.CFrame:ToObjectSpace(NewWeld.Part1.CFrame)
-					--SlotData.Accessories[i].OriginalC1 = CFrame.new(0,0,0)
-
-					NewWeld.C0 = AccessoryTable.AccessoryWeld.C0
-					NewWeld.C1 = CFrame.new(0,0,0)
-
-					if not AccessoryTable["DistanceFromOrigin"] then
-						AccessoryTable["DistanceFromOrigin"] = AccessoryTable["AccessoryWeld"]["C0"].Position - AccessoryTable["OriginalC0"].Position
-					end
-
-
-					if not AccessoryTable.RotationsApplied then
-						local X, Y, Z = AccessoryTable["AccessoryWeld"]["C0"]:ToEulerAnglesXYZ()
-						local X1, Y1, Z1 = AccessoryTable["OriginalC0"]:ToEulerAnglesXYZ()
-						AccessoryTable["RotationsApplied"] = Vector3.new(X-X1, Y-Y1, Z-Z1)
-					end
-				else -- meshparts
-					local Humanoid = player.Character.Humanoid
-					warn("Meshpart loading found!", AccessoryTable.AccessoryId)
-					local AccessoryId = AccessoryTable.AccessoryId
-					local InsertedAccessory = InsertService:LoadAsset(AccessoryId)
-					InsertedAccessory.Parent = workspace
-					InsertedAccessory = InsertedAccessory:FindFirstChildOfClass("Accessory")
-					InsertedAccessory.Handle.Transparency = AccessoryTable.Transparency
-
-					local newVal = Instance.new("IntValue")
-					newVal.Value = AccessoryId
-					newVal.Name = "AccessoryId"
-					newVal.Parent = InsertedAccessory
-
-					InsertedAccessory.Parent = workspace
-					Humanoid:AddAccessory(InsertedAccessory)
-
-					AccessoryTable.Object = InsertedAccessory
-
-					if AccessoryTable.ColorMode == "Overlay" then
-						local OTransparency = AccessoryTable.OTransparency
-						local OColor = AccessoryTable.Color or AccessoryTable.OColor
-						CreateOverlay(AccessoryTable.Object, OTransparency, OColor)
-					end
-
-					ApplyParticleData(AccessoryTable, InsertedAccessory.Handle)
-
-				end
-			end
-
-			return SlotData["Data"]
-		else
-			return false
-		end
-
-
+		return ShareIdService.LoadAccessoryId(player, ID, {
+			AccessoryIDsDataStore = AccessoryIDsDataStore,
+			DeserializeAccessoryTable = DeserializeAccessoryTable,
+			GetMaxAccessoriesForPlayer = GetMaxAccessoriesForPlayer,
+			DefaultAccessory = DefaultAccessory,
+			InsertService = InsertService,
+			CreateOverlay = CreateOverlay,
+			ApplyParticleData = ApplyParticleData,
+		})
 	end,
 
 	LoadLegacy = function(self, Player, Slot)
