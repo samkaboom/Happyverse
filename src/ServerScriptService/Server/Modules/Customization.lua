@@ -59,6 +59,7 @@ local AccessoryScaling = require(CustomizationModules:WaitForChild("AccessorySca
 local ValidationService = require(CustomizationModules:WaitForChild("ValidationService"))
 local AccessoryTransform = require(CustomizationModules:WaitForChild("AccessoryTransform"))
 local ClothingService = require(CustomizationModules:WaitForChild("ClothingService"))
+local LimbService = require(CustomizationModules:WaitForChild("LimbService"))
 
 local DefaultType = 0.25
 local DefaultProportion = 0
@@ -1153,32 +1154,7 @@ function LoadCharacter(Player, SlotData)
 end
 
 local function LimbRemover(Client, LimbToRemove, Transparency)
-	local x = Client.Character:FindFirstChild(LimbToRemove)
-	if x then
-		if Transparency == true then
-			x.Transparency = 1
-		else
-			x.Transparency = 0
-		end
-		local v = x:FindFirstChild("IntendedTransparency")
-		if v then
-			if Transparency == true then
-				v.Value = 1
-			else
-				v.Value = 0
-			end
-		else
-			v = Instance.new("NumberValue")
-			v.Name = "IntendedTransparency"
-			if Transparency == true then
-				v.Value = 1
-			else
-				v.Value = 0
-			end
-		end
-	end
-
-	return true
+	return LimbService.ApplyStoredLimbTransparency(Client, LimbToRemove, Transparency)
 end
 
 function deepCopy(original)
@@ -2233,10 +2209,7 @@ local Customization = {
 	end,
 	LimbRemover = function(self, Player, LimbName, SetType)
 		if self[Player.Name] then
-			local Limb = Player.Character:FindFirstChild(LimbName)
-			if Limb then
-				Limb.Transparency = SetType
-			end
+			LimbService.SetLiveLimbTransparency(Player, LimbName, SetType)
 		end
 		return true
 	end,
