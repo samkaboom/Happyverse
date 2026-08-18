@@ -150,6 +150,28 @@ local function ChangeOverlay(Accessory : Accessory, Transparency : number, Color
 	end
 end
 
+local function GetMeshPartTextureId(handle)
+	local textureId = handle.TextureID
+	if textureId and textureId ~= "" then
+		return textureId
+	end
+
+	local surfaceAppearance = handle:FindFirstChildOfClass("SurfaceAppearance")
+	if surfaceAppearance and surfaceAppearance.ColorMap ~= "" then
+		return surfaceAppearance.ColorMap
+	end
+
+	for i, descendant in pairs(handle:GetDescendants()) do
+		if descendant:IsA("Texture") or descendant:IsA("Decal") then
+			if descendant.Texture and descendant.Texture ~= "" then
+				return descendant.Texture
+			end
+		end
+	end
+
+	return textureId
+end
+
 local function ConvertToSpecialMesh(playerCharacter, accessory)
 	warn(playerCharacter, "converting to specialmesh attempt!", accessory)
 	local accessoryHandle = accessory:WaitForChild("Handle")
@@ -163,7 +185,7 @@ local function ConvertToSpecialMesh(playerCharacter, accessory)
 	newAttachment.Position = currentAttachment.Position
 	local mesh = newAccessory.Handle:FindFirstChildOfClass("SpecialMesh")
 	local currentMesh = accessory.Handle.MeshId
-	local currentTexture = accessory.Handle.TextureID
+	local currentTexture = GetMeshPartTextureId(accessory.Handle)
 
 	newAccessory.AttachmentForward = accessory.AttachmentForward
 	newAccessory.AttachmentPos = accessory.AttachmentPos
@@ -182,6 +204,7 @@ local function ConvertToSpecialMesh(playerCharacter, accessory)
 
 	mesh.MeshId = currentMesh
 	mesh.TextureId = currentTexture
+	warn("Converted MeshPart accessory values:", accessory.Name, currentMesh, currentTexture)
 
 	if accessoryIdValue then
 		accessoryIdValue:Clone().Parent = newAccessory
