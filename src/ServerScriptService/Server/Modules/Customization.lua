@@ -53,6 +53,7 @@ local ParticlesFolder = script:WaitForChild("Particles")
 local CustomizationModules = script.Parent:WaitForChild("CustomizationModules")
 local Serialization = require(CustomizationModules:WaitForChild("Serialization"))
 local AccessoryConversion = require(CustomizationModules:WaitForChild("AccessoryConversion"))
+local OverlayService = require(CustomizationModules:WaitForChild("OverlayService"))
 
 local DefaultType = 0.25
 local DefaultProportion = 0
@@ -72,83 +73,15 @@ local CachedLegacyCharacterData = {}
 local GroupID = 2962831
 
 local function CreateOverlay(accessory : Accessory, Transparency : number, Color : Color3)
-	if typeof(Color) == "Vector3" then
-		Color = Color3.new(Color.X, Color.Y, Color.Z)
-	end
-	local Handle = accessory.Handle 
-	local specialMesh = Handle:FindFirstChildOfClass("SpecialMesh")
-
-	if specialMesh then
-		for i, v in pairs(Handle:GetDescendants()) do
-			if v:IsA("Texture") then
-				v:Destroy()
-			end
-		end
-	else
-		if Handle:FindFirstChildOfClass("Texture") then
-			for i, v in pairs(Handle:GetDescendants()) do
-				if v:IsA("Texture") then
-					v:Destroy()
-				end
-			end
-		end
-
-
-	end
-
-	local Overlay = ServerAssets.Overlay
-	local faces = {
-		"Front",
-		"Back",
-		"Left",
-		"Right",
-		"Top",
-		"Bottom"
-	} 
-
-	if specialMesh then -- special meshs are special, just 1 is needed
-		local newOverlay = Overlay:Clone()
-		newOverlay.Color3 = Color
-		newOverlay.Transparency = Transparency
-		newOverlay.Face = "Front"
-		newOverlay.Parent = Handle
-	else
-		for i, face in pairs(faces) do
-			local newOverlay = Overlay:Clone()
-			newOverlay.Color3 = Color
-			newOverlay.Transparency = Transparency
-			newOverlay.Face = face
-			newOverlay.Parent = specialMesh or Handle
-		end
-	end
-
-
+	return OverlayService.CreateOverlay(accessory, Transparency, Color, ServerAssets)
 end
 
 local function DeleteOverlay(Accessory : Accessory)
-	for i, v in pairs(Accessory:GetDescendants()) do
-		if v:IsA("Texture") then
-			v:Destroy()
-		end
-	end
+	return OverlayService.DeleteOverlay(Accessory)
 end
 
 local function ChangeOverlay(Accessory : Accessory, Transparency : number, Color : Color3)
-	if typeof(Color) == "Vector3" then
-		Color = Color3.new(Color.X, Color.Y, Color.Z)
-	end
-	local textures = {}
-	for i, texture in pairs(Accessory:GetDescendants()) do
-		if texture:IsA("Texture") then
-			table.insert(textures, texture)
-		end
-	end
-	if #textures > 0 then
-		for i, texture in pairs(textures) do
-			texture.Transparency = Transparency
-			texture.Color3 = Color
-		end
-	end
+	return OverlayService.ChangeOverlay(Accessory, Transparency, Color)
 end
 
 local function ConvertToSpecialMesh(playerCharacter, accessory)
