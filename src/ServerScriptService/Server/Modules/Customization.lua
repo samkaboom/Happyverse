@@ -56,6 +56,7 @@ local AccessoryConversion = require(CustomizationModules:WaitForChild("Accessory
 local OverlayService = require(CustomizationModules:WaitForChild("OverlayService"))
 local ParticleService = require(CustomizationModules:WaitForChild("ParticleService"))
 local AccessoryScaling = require(CustomizationModules:WaitForChild("AccessoryScaling"))
+local ValidationService = require(CustomizationModules:WaitForChild("ValidationService"))
 
 local DefaultType = 0.25
 local DefaultProportion = 0
@@ -1522,11 +1523,7 @@ function round(n)
 end
 
 local function ValidateAccessoryOwner(Player, Accessory)
-	if Accessory:FindFirstAncestorOfClass("Model") ~= Player.Character then
-		Player:Kick("Invalid request")
-		return false
-	end
-	return true
+	return ValidationService.ValidateAccessoryOwner(Player, Accessory)
 end
 
 local OppositeBodyParts = {
@@ -1588,32 +1585,11 @@ local function RecalculateAccessoryTransformData(accessoryTable, character)
 end
 
 local function GetMaxAccessoriesForPlayer(player)
-	local maxAccessories = Constants.MaxAccessories
-	local ownsMoreAccessories = false
-	pcall(function()
-		ownsMoreAccessories = MarketplaceService:UserOwnsGamePassAsync(player.UserId, 179828905)
-	end)
-	if ownsMoreAccessories then
-		maxAccessories = Constants.MoreAccessoriesGamepassMaxAccessories
-	end
-	if vipwhitelist[player.UserId] or GroupVerif.CheckRank(player, "Gamemaster") or RunService:IsStudio() then
-		maxAccessories = Constants.SpecialMaxAccessories
-	end
-	return maxAccessories
+	return ValidationService.GetMaxAccessoriesForPlayer(player, Constants, MarketplaceService, RunService, GroupVerif, vipwhitelist)
 end
 
 local function GetFilteredBroadcastText(textObject)
-	local filteredMessage
-	local success, errorMessage = pcall(function()
-		filteredMessage = textObject:GetNonChatStringForBroadcastAsync()
-	end)
-
-	if success then
-		return filteredMessage
-	elseif errorMessage then
-		print("Error filtering message:", errorMessage)
-	end
-	return false
+	return ValidationService.GetFilteredBroadcastText(textObject)
 end
 
 local Customization = {
