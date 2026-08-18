@@ -68,6 +68,7 @@ local SaveDataService = require(CustomizationModules:WaitForChild("SaveDataServi
 local CustomizationUtil = require(CustomizationModules:WaitForChild("CustomizationUtil"))
 local PlayerIndexService = require(CustomizationModules:WaitForChild("PlayerIndexService"))
 local BodyColorService = require(CustomizationModules:WaitForChild("BodyColorService"))
+local ShareIdService = require(CustomizationModules:WaitForChild("ShareIdService"))
 
 local DefaultType = 0.25
 local DefaultProportion = 0
@@ -2095,154 +2096,15 @@ local Customization = {
 	end,
 
 	SaveOutfitID = function(self, Player, OutfitID, CharacterTable, LockID)
-		print("OUTFIT ID:", OutfitID)
-		if OutfitID then
-
-			if CharacterTable["LockedID"] then
-				if CharacterTable["LockedID"] ~= Player.UserId then
-					warn("Outfit is locked, denying changes.")
-					return false
-				end
-			end
-
-			local success, result = pcall(function()
-
-
-				local NewSlot = { 
-					["SlotName"] = OutfitID,
-					["Data"] = CharacterTable
-
-				}
-
-				local newS = SerializeTable(NewSlot)
-				OutfitIDsDataStore:SetAsync(tostring(OutfitID), newS)
-				return
-			end)
-
-			if success then return OutfitID else warn(result) return false end
-
-		else
-
-			if LockID then CharacterTable["LockedID"] = Player.UserId else CharacterTable.LockedID = nil end
-
-			local function CheckIfUsedAndFindNew()
-				local seed = tick()
-				math.randomseed(seed)
-				local random = math.random(100000, 999999)
-				print("New OutfitID:", random)
-
-				local found = OutfitIDsDataStore:GetAsync(tostring(random))
-
-				if found then
-					return CheckIfUsedAndFindNew()
-				else
-					return random
-				end
-			end
-
-			OutfitID = CheckIfUsedAndFindNew()
-
-			local success, result = pcall(function()
-
-				local NewSlot = { 
-					["SlotName"] = OutfitID,
-					["Data"] = CharacterTable
-
-				}
-
-				local newS = SerializeTable(NewSlot)
-				OutfitIDsDataStore:SetAsync(tostring(OutfitID), newS)
-				return
-			end)
-			if success then return OutfitID, Player.UserId else warn(result) return false end
-		end
-
+		return ShareIdService.SaveOutfitId(Player, OutfitID, CharacterTable, LockID, OutfitIDsDataStore, SerializeTable)
 	end,
 
 	LoadOutfitID = function(self, Player, OutfitID)
-		if OutfitID then
-			local success, result = pcall(function()
-				local found = OutfitIDsDataStore:GetAsync(tostring(OutfitID))	
-				return found
-			end)
-
-			if success then
-				if result then
-
-					result = DeserializeTable(result)
-					result = LoadCharacter(Player, result)
-					return result
-				else
-					warn("ID", OutfitID, "doesn't exist.")
-					return result
-
-				end
-			else
-				warn(result)
-				return false
-			end
-
-		else
-			warn("No Outfit ID provided.")
-			return false
-		end
+		return ShareIdService.LoadOutfitId(Player, OutfitID, OutfitIDsDataStore, DeserializeTable, LoadCharacter)
 	end,
 
 	SaveAccessoryID = function(self, Player, ID, SelectedAccessories, LockID)
-		print("OUTFIT ID:", ID)
-		if typeof(SelectedAccessories) ~= "table" or #SelectedAccessories > GetMaxAccessoriesForPlayer(Player) then return false end
-		if ID then
-
-
-			local success, result = pcall(function()
-
-
-				local NewSlot = { 
-					["SlotName"] = ID,
-					["Data"] = SelectedAccessories
-				}
-
-				local newS = SerializeTable(NewSlot)
-				AccessoryIDsDataStore:SetAsync(tostring(ID), newS)
-				return
-			end)
-
-			if success then return ID else warn(result) return false end
-
-		else
-
-			local function CheckIfUsedAndFindNew()
-				local seed = tick()
-				math.randomseed(seed)
-				local random = math.random(100000, 999999)
-				print("New AccessoryID:", random)
-
-				local found = AccessoryIDsDataStore:GetAsync(tostring(random))
-
-				if found then
-					return CheckIfUsedAndFindNew()
-				else
-					return random
-				end
-			end
-
-			ID = CheckIfUsedAndFindNew()
-
-			local success, result = pcall(function()
-
-				local NewSlot = { 
-					["SlotName"] = ID,
-					["Data"] = SelectedAccessories,
-					["Locked"] = true,
-
-				}
-				local newS = SerializeAccessoryTable(NewSlot)
-				AccessoryIDsDataStore:SetAsync(tostring(ID), newS)
-				return
-			end)
-			if success then return ID, Player.UserId else warn(result) return false end
-		end
-
+		return ShareIdService.SaveAccessoryId(Player, ID, SelectedAccessories, LockID, AccessoryIDsDataStore, SerializeTable, SerializeAccessoryTable, GetMaxAccessoriesForPlayer)
 	end,
 
 	LoadAccessoryID = function(self, player, ID)
