@@ -62,6 +62,7 @@ local ClothingService = require(CustomizationModules:WaitForChild("ClothingServi
 local LimbService = require(CustomizationModules:WaitForChild("LimbService"))
 local CharacterInfoService = require(CustomizationModules:WaitForChild("CharacterInfoService"))
 local FaceService = require(CustomizationModules:WaitForChild("FaceService"))
+local AccessoryEditService = require(CustomizationModules:WaitForChild("AccessoryEditService"))
 
 local DefaultType = 0.25
 local DefaultProportion = 0
@@ -1751,44 +1752,13 @@ local Customization = {
 	AColor = function(self, Player : Player, UpdateTable : table, ColorInput : Color3)
 
 		if self[Player.Name] then
-			local Color = Vector3.new(ColorInput.R, ColorInput.G, ColorInput.B)
-			for i, AccessoryTable in pairs(UpdateTable) do
-				if not AccessoryTable.IsItemPack then
-					print(Player, AccessoryTable.Accessory, Color)
-					local Accessory : Accessory = AccessoryTable.Object
-					if not ValidateAccessoryOwner(Player, Accessory) then return end
-					if AccessoryTable.ColorMode == "VertexColor" then
-						if not AccessoryTable.IsMeshPart then
-							Accessory.Handle:FindFirstChildOfClass("SpecialMesh").VertexColor = Color
-							Accessory.Handle.Color = Color3.new(Color.X, Color.Y, Color.Z)
-						end
-					elseif AccessoryTable.ColorMode == "Overlay" then
-						ChangeOverlay(Accessory, AccessoryTable.OTransparency, ColorInput)
-						if not AccessoryTable.IsMeshPart then
-							--Accessory.Handle:FindFirstChildOfClass("SpecialMesh").VertexColor = Vector3.new(1,1,1)
-							Accessory.Handle.Color = Color3.new(Color.X, Color.Y, Color.Z)
-						end
-						Accessory.Handle.Color = Color3.new(Color.X, Color.Y, Color.Z)
-					end
-				end
-			end
-
-			return Color
+			return AccessoryEditService.ApplyAccessoryColor(Player, UpdateTable, ColorInput, ValidateAccessoryOwner, ChangeOverlay)
 		end
 	end,
 
 	PColor = function(self, Player, SelectedAccessories)
 		if self[Player.Name] then
-			for i, AccessoryTable in ipairs(SelectedAccessories) do
-				local Accessory : Accessory = AccessoryTable.Object
-				if not ValidateAccessoryOwner(Player, Accessory) then return end
-
-				local Effect = Accessory.Handle:FindFirstChildOfClass("ParticleEmitter")
-				if Effect then
-					ApplyParticleColor(AccessoryTable, Effect)
-				end
-			end
-			return true
+			return AccessoryEditService.ApplyParticleColor(Player, SelectedAccessories, ValidateAccessoryOwner, ApplyParticleColor)
 		end
 	end,
 
@@ -1929,220 +1899,61 @@ local Customization = {
 	ATransparency = function(self,Player,UpdateTable,Value)
 
 		if self[Player.Name] then
-			for i, AccessoryTable in pairs(UpdateTable) do
-				local Accessory : Accessory = AccessoryTable.Object
-				if not ValidateAccessoryOwner(Player, Accessory) then return end
-				Accessory.Handle.Transparency = Value
-			end
-			return Value
+			return AccessoryEditService.SetTransparency(Player, UpdateTable, Value, ValidateAccessoryOwner)
 		end
 	end,
 	Material = function(self,Player,SelectedAccessories)
 
 
 		if self[Player.Name] then
-			for i, AccessoryTable in ipairs(SelectedAccessories) do
-				--print("MATERIAL", Player, AccessoryTable.Material)
-				local Accessory : Accessory = AccessoryTable.Object
-				if not ValidateAccessoryOwner(Player, Accessory) then return end
-				Accessory.Handle.Material = AccessoryTable.Material
-			end
-
-			return true
+			return AccessoryEditService.SetMaterial(Player, SelectedAccessories, ValidateAccessoryOwner)
 		end
 	end,
 	MeshId = function(self,Player,SelectedAccessories)
 
-		for i, AccessoryTable in pairs(SelectedAccessories) do
-			local Accessory : Accessory = AccessoryTable.Object
-			if not ValidateAccessoryOwner(Player, Accessory) then return end
-			if not AccessoryTable.IsMeshPart and not AccessoryTable.IsItemPack then
-				Accessory.Handle:FindFirstChildOfClass("SpecialMesh").MeshId = AccessoryTable.MeshId
-			end
-		end
-		return true
+		return AccessoryEditService.SetMeshId(Player, SelectedAccessories, ValidateAccessoryOwner)
 	end,
 	Particle = function(self,Player,SelectedAccessories,ParticleType)
 		if self[Player.Name] then
-			for index, AccessoryTable in ipairs(SelectedAccessories) do
-				local Accessory : Accessory = AccessoryTable.Object
-				if not ValidateAccessoryOwner(Player, Accessory) then return end
-
-				local P = Accessory.Handle:FindFirstChildOfClass("ParticleEmitter")
-				if P then P:Destroy() end
-
-				if ParticleType ~= "None" then
-					local Found = ParticlesFolder:FindFirstChild(ParticleType)
-					if Found then
-						Found = Found:Clone()
-						Found.Parent = Accessory.Handle
-						Found.Enabled = true
-						ApplyParticleColor(AccessoryTable, Found)
-					end
-				end
-			end
+			return AccessoryEditService.SetParticle(Player, SelectedAccessories, ParticleType, ParticlesFolder, ValidateAccessoryOwner, ApplyParticleColor)
 		end
 	end,
 
 	ParticleAdjust = function(self,Player,SelectedAccessories)
 		if self[Player.Name] then
-			for index, AccessoryTable in ipairs(SelectedAccessories) do
-				local Accessory : Accessory = AccessoryTable.Object
-				if not ValidateAccessoryOwner(Player, Accessory) then return end
-
-				local P = Accessory.Handle:FindFirstChildOfClass("ParticleEmitter")
-				if P then
-					ConfigureParticleEmitter(AccessoryTable, P)
-				end
-			end
-			return true
+			return AccessoryEditService.AdjustParticle(Player, SelectedAccessories, ValidateAccessoryOwner, ConfigureParticleEmitter)
 		end
 	end,
 
 	Texture = function(self,Player,UpdateTable, Value)
 		if self[Player.Name] then
-			local ToApply = "https://www.roblox.com/Thumbs/Asset.ashx?width=420&height=420&assetId=" .. tostring(Value)
-			for i, AccessoryTable in pairs(UpdateTable) do
-				local Accessory : Accessory = AccessoryTable.Object
-				if not ValidateAccessoryOwner(Player, Accessory) then return end
-				if AccessoryTable.IsMeshPart then
-					Accessory.Handle.TextureID = ToApply
-				elseif not AccessoryTable.IsMeshPart and not AccessoryTable.IsItemPack then
-					Accessory.Handle:FindFirstChildOfClass("SpecialMesh").TextureId = ToApply
-				end
-
-			end
-
-			return ToApply
+			return AccessoryEditService.SetTexture(Player, UpdateTable, Value, ValidateAccessoryOwner)
 		end
 
 	end,
 	Position = function(self,Player,TableOfAccessories)
 		if self[Player.Name] then
-			for i, accessorytable in ipairs(TableOfAccessories) do
-				local Accessory : Accessory = accessorytable.Object
-				if not ValidateAccessoryOwner(Player, Accessory) then return end
-				if accessorytable.IsItemPack then
-					local Obj = accessorytable.Object
-					local Handle = Obj.Handle
-					local Weld = Handle:FindFirstChild("AccessoryWeld")
-					Weld.C0 = accessorytable.AccessoryWeld.C0
-					Weld.C1 = accessorytable.AccessoryWeld.C1
-				else
-					local Obj = accessorytable.Object
-					local Handle = Obj.Handle
-					local Weld = Handle:FindFirstChildOfClass("Weld")
-					Weld.C0 = accessorytable.AccessoryWeld.C0
-					Weld.C1 = accessorytable.AccessoryWeld.C1
-				end
-
-			end
-			return true
+			return AccessoryEditService.SetWeldTransform(Player, TableOfAccessories, ValidateAccessoryOwner)
 		end
 	end,
 	Size = function(self,Player,TableOfAccessories)
 		if self[Player.Name] then
-			for i, accessorytable in ipairs(TableOfAccessories) do
-				local Accessory : Accessory = accessorytable.Object
-				if not ValidateAccessoryOwner(Player, Accessory) then return end
-				if not accessorytable.IsItemPack then
-					local Obj = accessorytable.Object
-					local Handle = Obj.Handle
-					local Mesh = Handle:FindFirstChildOfClass("SpecialMesh")
-					if Mesh then
-						-- accessorytable.Scale is now the actual visual size.
-						-- Do NOT shrink it again here.
-						Mesh.Scale = accessorytable.Scale
-
-						if accessorytable.WeldPart == "Head" then
-							Accessory:SetAttribute("HeadScaleHandledByCustomizer", true)
-						end
-					else
-						Handle.Size = Handle.Size
-					end
-				end
-			end
-			return true
+			return AccessoryEditService.SetSize(Player, TableOfAccessories, ValidateAccessoryOwner)
 		end
 	end,
 	Rotation = function(self,Player,TableOfAccessories)
 		if self[Player.Name] then
-			for i, accessorytable in ipairs(TableOfAccessories) do
-				local Accessory : Accessory = accessorytable.Object
-				if not ValidateAccessoryOwner(Player, Accessory) then return end
-				if accessorytable.IsItemPack then
-					local Obj = accessorytable.Object
-					local Handle = Obj.Handle
-					local Weld = Handle:FindFirstChild("AccessoryWeld")
-					Weld.C0 = accessorytable.AccessoryWeld.C0
-					Weld.C1 = accessorytable.AccessoryWeld.C1
-				else
-					local Obj = accessorytable.Object
-					local Handle = Obj.Handle
-					local Weld = Handle:FindFirstChildOfClass("Weld")
-					Weld.C0 = accessorytable.AccessoryWeld.C0
-					Weld.C1 = accessorytable.AccessoryWeld.C1
-				end
-			end
-			return true
+			return AccessoryEditService.SetWeldTransform(Player, TableOfAccessories, ValidateAccessoryOwner)
 		end
 	end,
 	WeldPart = function(self, Player, SelectedAccessories, PartName)
 		if self[Player.Name] then
-			for i, tableAssociated in ipairs(SelectedAccessories) do
-				local Accessory : Accessory = tableAssociated.Object
-				if not ValidateAccessoryOwner(Player, Accessory) then return end
-				if tableAssociated["IsItemPack"] then
-					tableAssociated.Object.Handle:FindFirstChild("AccessoryWeld").Part1 = Player.Character:FindFirstChild(PartName)
-				elseif not tableAssociated.IsItemPack and not tableAssociated.IsMeshPart then
-					tableAssociated.Object.Handle:FindFirstChildOfClass("Weld").Part1 = Player.Character:FindFirstChild(PartName)
-				end
-
-
-			end
-			return true
+			return AccessoryEditService.SetWeldPart(Player, SelectedAccessories, PartName, ValidateAccessoryOwner)
 		end
 	end,
 	MirrorAccessory = function(self, Player, SelectedAccessories)
 		if self[Player.Name] then
-			local character = Player.Character
-			local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-			if not rootPart then return false end
-
-			local mirroredAny = false
-
-			for i, accessoryTable in ipairs(SelectedAccessories) do
-				if not accessoryTable.IsMeshPart then
-					local Accessory : Accessory = accessoryTable.Object
-					if not ValidateAccessoryOwner(Player, Accessory) then return end
-
-					local currentPartName = accessoryTable.WeldPart
-					local targetPartName = OppositeBodyParts[currentPartName]
-					local targetPart = targetPartName and character:FindFirstChild(targetPartName)
-					local sourcePart = currentPartName and character:FindFirstChild(currentPartName)
-					local handle = Accessory and Accessory:FindFirstChild("Handle")
-					local weld = handle and (handle:FindFirstChild("AccessoryWeld") or handle:FindFirstChildOfClass("Weld"))
-
-					if targetPart and sourcePart and handle and weld then
-						local currentHandleWorld = sourcePart.CFrame * accessoryTable.AccessoryWeld.C0:Inverse()
-						local rootRelative = rootPart.CFrame:ToObjectSpace(currentHandleWorld)
-						local mirroredRootRelative = MirrorCFrameAcrossCharacter(rootRelative)
-						local mirroredHandleWorld = rootPart.CFrame * mirroredRootRelative
-
-						weld.Part1 = targetPart
-						weld.C0 = mirroredHandleWorld:ToObjectSpace(targetPart.CFrame)
-						weld.C1 = CFrame.new(0, 0, 0)
-
-						accessoryTable.WeldPart = targetPartName
-						accessoryTable.AccessoryWeld.C0 = weld.C0
-						accessoryTable.AccessoryWeld.C1 = weld.C1
-						RecalculateAccessoryTransformData(accessoryTable, character)
-						mirroredAny = true
-					end
-				end
-			end
-
-			return mirroredAny and SelectedAccessories or false
+			return AccessoryEditService.MirrorAccessories(Player, SelectedAccessories, ValidateAccessoryOwner, OppositeBodyParts, MirrorCFrameAcrossCharacter, RecalculateAccessoryTransformData)
 		end
 	end,
 	LimbRemover = function(self, Player, LimbName, SetType)
