@@ -457,9 +457,6 @@ local function StartFreecam()
 	if LocalPlayer.PlayerGui:FindFirstChild("MainMenu") then
 		LocalPlayer.PlayerGui.MainMenu.Enabled = false
 	end
-	if LocalPlayer.PlayerGui:FindFirstChild("Players") then
-		LocalPlayer.PlayerGui.Players.Enabled = false
-	end
 	if LocalPlayer.PlayerGui:FindFirstChild("SpectateGui") then
 		LocalPlayer.PlayerGui.SpectateGui.Enabled = false
 	end
@@ -526,4 +523,3 @@ end)
 script.Parent.MouseButton1Click:Connect(function()
 	ToggleFreecam()
 end)
-
