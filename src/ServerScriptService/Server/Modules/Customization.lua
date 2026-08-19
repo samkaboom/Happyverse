@@ -492,47 +492,15 @@ local Customization = {
 	end,
 
 	Save = function(self, Player, CharacterData, SlotName, Slot)
-		print("Save", Player, CharacterData, SlotName, Slot)
-
-
-		local NewSlot = {
-			["SlotName"] = SlotName,
-			["Data"] = deepCopy(CharacterData)
-		}
-		print("NEW SLOT:", NewSlot)
-		local postreturn = POSTSave(Player.UserId, NewSlot, Slot)
-		CachedPlayerSlotNames[Player.UserId][tostring(Slot)] = SlotName
-		return postreturn
+		return SaveDataService.SaveCharacter(Player, CharacterData, SlotName, Slot, POSTSave, CachedPlayerSlotNames, deepCopy)
 	end,
 
 	Load = function(self, Player, Slot)
-		print("Load", Player, Slot)
-		if Player.Character:FindFirstChildOfClass("Tool") then return false end
-		local CurrentInformation = GETSaveFromSlot(Player.UserId, false, Slot)
-		warn("CURRENT INFORMATION FROM LOAD:", CurrentInformation)
-		if CurrentInformation == false or CurrentInformation == nil then return false end
-		warn("LOADED SLOT:", CurrentInformation)
-
-		local ReturnTable = LoadCharacter(Player, CurrentInformation)
-		return ReturnTable
-
-
-
+		return SaveDataService.LoadCharacterSlot(Player, Slot, GETSaveFromSlot, LoadCharacter)
 	end,
 
 	RestoreAccessoryHistory = function(self, Player, CharacterData)
-		print("RestoreAccessoryHistory", Player)
-		if Player.Character:FindFirstChildOfClass("Tool") then return false end
-		if typeof(CharacterData) ~= "table" or typeof(CharacterData.Accessories) ~= "table" then return false end
-
-		if #CharacterData.Accessories > GetMaxAccessoriesForPlayer(Player) then return false end
-
-		local SlotData = {
-			["SlotName"] = "UndoRedo",
-			["Data"] = deepCopy(CharacterData)
-		}
-
-		return LoadCharacter(Player, SlotData)
+		return SaveDataService.RestoreAccessoryHistory(Player, CharacterData, GetMaxAccessoriesForPlayer, deepCopy, LoadCharacter)
 	end,
 
 	SaveOutfitID = function(self, Player, OutfitID, CharacterTable, LockID)
@@ -560,33 +528,13 @@ local Customization = {
 	end,
 
 	LoadLegacy = function(self, Player, Slot)
-		print("LoadLegacy", Player, Slot)
-		local CurrentInformation = GETLegacySave(Player)
-
-		print("CURRENT INFO", CurrentInformation)
-		if CurrentInformation == false then return false end
-		local SpecificSlot = CurrentInformation[Slot]
-		print("SPECIFIC SLOT", SpecificSlot)
-		if SpecificSlot then
-			local ReturnTable = LoadLegacyCharacterSlot(Player, Slot, SpecificSlot)
-			return ReturnTable
-		else
-			return false
-		end
+		return SaveDataService.LoadLegacySlot(Player, Slot, GETLegacySave, LoadLegacyCharacterSlot)
 	end,
 	AllData = function(self, Player)
-		repeat task.wait() until CachedPlayerSlotNames[Player.UserId] ~= nil
-		return CachedPlayerSlotNames[Player.UserId]
+		return SaveDataService.GetAllData(Player, CachedPlayerSlotNames)
 	end,
 	AllLegacyData = function(self, Player)
-		local Table = CachedLegacyCharacterData[tostring(Player.UserId)]
-		if Table then
-			print("Giving player all legacy data.")
-			return Table
-		else
-			warn("No legacy data detected.")
-			return false
-		end
+		return SaveDataService.GetAllLegacyDataForPlayer(Player, CachedLegacyCharacterData)
 	end,
 	Tutorial = function(self, Player)
 		return SaveDataService.GetTutorial(Player, TutorialDataStore)
