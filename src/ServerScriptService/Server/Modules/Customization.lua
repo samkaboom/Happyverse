@@ -114,24 +114,6 @@ local function IsOccupiedSkills(SkillsValueSlot)
 	return CustomizationUtil.IsOccupiedSkills(SkillsValueSlot)
 end
 
-local function GETSaveFromSlot(UserId, ForceTrueGET, Slot)
-	return SaveDataService.GetSaveFromSlot(UserId, ForceTrueGET, Slot, NewSlots, CachedCharacterData, DeserializeTable)
-end
-
-
-local function GETLegacySave(Client)
-	return SaveDataService.GetLegacySave(Client, CachedLegacyCharacterData)
-end
-
-local function GetAllLegacyData(Client)
-	return SaveDataService.GetAllLegacyData(Client, DataStoreService, CurrentLegacyDataStore, HttpService)
-end
-
-
-local function POSTSave(UserId, Table, Slot, IgnoreCache) -- loading
-	return SaveDataService.PostSave(UserId, Table, Slot, IgnoreCache, NewSlots, CachedCharacterData, CachedPlayerSlotNames, SerializeTable)
-end
-
 local function SerializeTable(Table)
 	return Serialization.SerializeTable(Table, HttpService)
 end
@@ -151,6 +133,25 @@ end
 local function DeserializeAccessoryTable(Table)
 	return Serialization.DeserializeAccessoryTable(Table, HttpService)
 end
+
+local function GETSaveFromSlot(UserId, ForceTrueGET, Slot)
+	return SaveDataService.GetSaveFromSlot(UserId, ForceTrueGET, Slot, NewSlots, CachedCharacterData, DeserializeTable)
+end
+
+
+local function GETLegacySave(Client)
+	return SaveDataService.GetLegacySave(Client, CachedLegacyCharacterData)
+end
+
+local function GetAllLegacyData(Client)
+	return SaveDataService.GetAllLegacyData(Client, DataStoreService, CurrentLegacyDataStore, HttpService)
+end
+
+
+local function POSTSave(UserId, Table, Slot, IgnoreCache) -- loading
+	return SaveDataService.PostSave(UserId, Table, Slot, IgnoreCache, NewSlots, CachedCharacterData, CachedPlayerSlotNames, SerializeTable)
+end
+
 local CachedAccessoriesUniversal= {}
 
 local TARGET_HEAD_ASSET_ID = AccessoryScaling.TargetHeadAssetId
