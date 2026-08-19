@@ -36,16 +36,7 @@ local searchBar = propBin.Parent.Naming.NameButton
 local selectedProp = false
 local moving = false
 local rotating = false
-local propFolder = ReplicatedStorage:WaitForChild("Prop", 5)
-if not propFolder then
-	warn("PropPlacer disabled: ReplicatedStorage.Prop is missing.")
-	return
-end
-local currentProp = propFolder:WaitForChild("wovProp", 5)
-if not currentProp then
-	warn("PropPlacer disabled: ReplicatedStorage.Prop.wovProp is missing.")
-	return
-end
+local currentProp = ReplicatedStorage:WaitForChild("Prop").wovProp
 local propsPlacerInvoke = ReplicatedStorage:WaitForChild("PropPlacerInvoke")
 local currentSelectedProp = {}
 
