@@ -102,7 +102,7 @@ GroupId = 17062776
 
 local PlayerGui = Client:WaitForChild("PlayerGui")
 
-game:GetService("StarterGui"):SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
+-- Avoid toggling Roblox's PlayerList CoreGui during boot; Studio can throw inside CoreGui.Settings.Pages.Players.
 
 -- main/bottom bar
 

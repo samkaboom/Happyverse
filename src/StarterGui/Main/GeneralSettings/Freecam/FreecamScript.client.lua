@@ -362,7 +362,6 @@ local PlayerState = {} do
 		Backpack = true,
 		Chat = true,
 		Health = true,
-		PlayerList = true,
 	}
 	local setCores = {
 		BadgesNotificationsActive = true,
@@ -527,5 +526,4 @@ end)
 script.Parent.MouseButton1Click:Connect(function()
 	ToggleFreecam()
 end)
-
 

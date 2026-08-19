@@ -2,7 +2,7 @@ local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local ReplicatedFirst = game:GetService("ReplicatedFirst")
 
-game:GetService("StarterGui"):SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
+-- Avoid toggling Roblox's PlayerList CoreGui; Studio can throw inside CoreGui.Settings.Pages.Players.
 print("TRYING TO GET TP UI")
 local customLoadingScreen = TeleportService:GetArrivingTeleportGui()
 if customLoadingScreen then
