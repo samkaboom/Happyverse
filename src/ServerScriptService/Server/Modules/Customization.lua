@@ -54,24 +54,6 @@ local CustomizationModules = script.Parent:WaitForChild("CustomizationModules")
 local Serialization = require(CustomizationModules:WaitForChild("Serialization"))
 local AccessoryConversion = require(CustomizationModules:WaitForChild("AccessoryConversion"))
 local OverlayService = require(CustomizationModules:WaitForChild("OverlayService"))
-local ParticleService = require(CustomizationModules:WaitForChild("ParticleService"))
-local AccessoryScaling = require(CustomizationModules:WaitForChild("AccessoryScaling"))
-local ValidationService = require(CustomizationModules:WaitForChild("ValidationService"))
-local AccessoryTransform = require(CustomizationModules:WaitForChild("AccessoryTransform"))
-local ClothingService = require(CustomizationModules:WaitForChild("ClothingService"))
-local LimbService = require(CustomizationModules:WaitForChild("LimbService"))
-local CharacterInfoService = require(CustomizationModules:WaitForChild("CharacterInfoService"))
-local FaceService = require(CustomizationModules:WaitForChild("FaceService"))
-local AccessoryEditService = require(CustomizationModules:WaitForChild("AccessoryEditService"))
-local CharacterScaleService = require(CustomizationModules:WaitForChild("CharacterScaleService"))
-local SaveDataService = require(CustomizationModules:WaitForChild("SaveDataService"))
-local CustomizationUtil = require(CustomizationModules:WaitForChild("CustomizationUtil"))
-local PlayerIndexService = require(CustomizationModules:WaitForChild("PlayerIndexService"))
-local BodyColorService = require(CustomizationModules:WaitForChild("BodyColorService"))
-local ShareIdService = require(CustomizationModules:WaitForChild("ShareIdService"))
-local CharacterLoadService = require(CustomizationModules:WaitForChild("CharacterLoadService"))
-local CharacterLegacyLoadService = require(CustomizationModules:WaitForChild("CharacterLegacyLoadService"))
-local AccessoryFixService = require(CustomizationModules:WaitForChild("AccessoryFixService"))
 
 local DefaultType = 0.25
 local DefaultProportion = 0
@@ -107,169 +89,1976 @@ local function ConvertToSpecialMesh(playerCharacter, accessory)
 end
 
 local function FindToolFromItem(player, accessory)
-	return CustomizationUtil.FindToolFromItem(player, accessory)
+	for i, tool in pairs(player.Backpack:GetChildren()) do
+		if tool:FindFirstChild("AssociatedObject") then
+			if tool.AssociatedObject.Value == accessory then
+				return tool
+			end
+		end
+	end
 end
 
 local function IsOccupiedSkills(SkillsValueSlot)
-	return CustomizationUtil.IsOccupiedSkills(SkillsValueSlot)
-end
-
-local function SerializeTable(Table)
-	return Serialization.SerializeTable(Table, HttpService)
-end
-
-local function SerializeAccessoryTable(Table)
-	return Serialization.SerializeAccessoryTable(Table, HttpService)
-end
-
-local function DeserializeTable_Old(Table)
-	return Serialization.DeserializeTable_Old(Table, HttpService)
-end
-
-local function DeserializeTable(Table)
-	return Serialization.DeserializeTable(Table, HttpService)
-end
-
-local function DeserializeAccessoryTable(Table)
-	return Serialization.DeserializeAccessoryTable(Table, HttpService)
+	local found = false
+	for z, v in pairs(SkillsValueSlot) do
+		warn("FOUND!")
+		found = true
+		break
+	end
+	return found
 end
 
 local function GETSaveFromSlot(UserId, ForceTrueGET, Slot)
-	return SaveDataService.GetSaveFromSlot(UserId, ForceTrueGET, Slot, NewSlots, CachedCharacterData, DeserializeTable)
+	print("GET SAVE", UserId, "FORCETRUEGET?", ForceTrueGET, Slot)
+	local success, response = pcall(function()
+		local returned
+		if ForceTrueGET then
+			print("Getting forced new data for", UserId, "at slot", Slot)
+			returned = NewSlots:GetAsync(tostring(UserId) .. "_" .. tostring(Slot))
+			if returned then
+				returned = DeserializeTable(returned)
+				return returned
+			else
+				warn(returned)
+				return returned
+			end
+		else
+
+			local function Execute()
+				print("Getting forced new data for", UserId, "at slot", Slot)
+				returned = NewSlots:GetAsync(tostring(UserId) .. "_" .. tostring(Slot))
+				if returned then
+					returned = DeserializeTable(returned)
+					CachedCharacterData[tostring(UserId)][tostring(Slot)] = returned
+					return returned
+				else
+					warn(returned)
+					return returned
+				end
+			end
+
+
+			warn("cache slot:",CachedCharacterData[tostring(UserId)][tostring(Slot)])
+			if CachedCharacterData[tostring(UserId)] == nil then print("No UserId slot"); return Execute() end
+			if CachedCharacterData[tostring(UserId)][tostring(Slot)] == nil then print("No slot in general.");  return Execute() else
+
+				return DeserializeTable(CachedCharacterData[tostring(UserId)][tostring(Slot)])
+			end
+		end
+	end)
+
+	if success then 
+		return response
+	else
+		warn(response)
+		return false
+	end
+
 end
 
 
 local function GETLegacySave(Client)
-	return SaveDataService.GetLegacySave(Client, CachedLegacyCharacterData)
+	local v = CachedLegacyCharacterData[tostring(Client.UserId)]
+	if v then	
+		return v
+	else 
+		return false
+	end
 end
 
 local function GetAllLegacyData(Client)
-	return SaveDataService.GetAllLegacyData(Client, DataStoreService, CurrentLegacyDataStore, HttpService)
+	print("getting all data")
+	local bigTable = {}
+	local found = false
+	for i = 1, 24, 1 do
+		wait()
+
+		local CharacterInfoDS = DataStoreService:GetDataStore(CurrentLegacyDataStore .. tostring(i))
+		local result, value = pcall(function()
+
+			local v = CharacterInfoDS:GetAsync(Client.UserId)
+
+			return v
+		end)
+
+		if result == false then
+			warn("Data store isn't working!")
+			return false
+		end
+
+		if value then 
+
+			local Value = HttpService:JSONDecode(value)
+			bigTable[i] = Value
+			found = true
+		else
+			bigTable[i] = false
+		end
+	end
+	wait()
+	if found == false then
+		return false
+	else
+		return bigTable
+	end
 end
 
 
 local function POSTSave(UserId, Table, Slot, IgnoreCache) -- loading
-	return SaveDataService.PostSave(UserId, Table, Slot, IgnoreCache, NewSlots, CachedCharacterData, CachedPlayerSlotNames, SerializeTable)
+	local success, response = pcall(function()
+		local ActualTable = SerializeTable(Table)
+		warn("POSTING NOW", UserId, Slot)
+		NewSlots:SetAsync(tostring(UserId) .. "_" .. tostring(Slot), ActualTable)
+
+		if CachedCharacterData[tostring(UserId)] == nil then CachedCharacterData[tostring(UserId)] = {}; print("Had no cached data so POSTSave made it") end
+		if IgnoreCache == nil or IgnoreCache == false then CachedCharacterData[tostring(UserId)][tostring(Slot)] = Table end
+		CachedPlayerSlotNames[UserId][tostring(Slot)] = Table.SlotName
+		return Table
+	end)
+
+	if success then return true else warn(response) return false end
+
+end
+
+local SerializeVector3 = Serialization.SerializeVector3
+local DeserializeVector3 = Serialization.DeserializeVector3
+local SerializeColor3 = Serialization.SerializeColor3
+local DeserializeColor3 = Serialization.DeserializeColor3
+local SerializeCFrame = Serialization.SerializeCFrame
+local DeserializeCFrame = Serialization.DeserializeCFrame
+local SerializeMaterial = Serialization.SerializeMaterial
+local DeserializeMaterial = Serialization.DeserializeMaterial
+
+local function SerializeParticleData(AccessoryTable)
+	if AccessoryTable.Particle == nil then
+		AccessoryTable.Particle = "None"
+		AccessoryTable.ParticleColor = {["R"] = 1, ["G"] = 1, ["B"] = 1}
+		AccessoryTable.ParticleSize = 0
+		AccessoryTable.ParticleTransparency = 0
+		AccessoryTable.ParticleRate = 0
+	else
+		AccessoryTable.ParticleColor = SerializeColor3(AccessoryTable.ParticleColor)
+	end
+end
+
+local function DeserializeParticleData(AccessoryTable)
+	if AccessoryTable.Particle == nil then
+		AccessoryTable.Particle = "None"
+		AccessoryTable.ParticleColor = Color3.fromRGB(255,255,255)
+		AccessoryTable.ParticleSize = 0
+		AccessoryTable.ParticleTransparency = 0
+		AccessoryTable.ParticleRate = 0
+	else
+		AccessoryTable.ParticleColor = DeserializeColor3(AccessoryTable.ParticleColor)
+		if AccessoryTable.ParticleSize == nil then
+			AccessoryTable.ParticleSize = 0
+			AccessoryTable.ParticleTransparency = 0
+			AccessoryTable.ParticleRate = 0
+		end
+	end
+end
+
+local function SerializeTransformData(AccessoryTable, IncludeRevertC0)
+	AccessoryTable.AccessoryWeld.C0 = SerializeCFrame(AccessoryTable.AccessoryWeld.C0)
+	AccessoryTable.AccessoryWeld.C1 = SerializeCFrame(AccessoryTable.AccessoryWeld.C1)
+
+	if not AccessoryTable.RootRotation then
+		local X, Y, Z = AccessoryTable.OriginalC0:Inverse():ToEulerAnglesXYZ()
+		AccessoryTable.RootRotation = {["X"] = X, ["Y"] = Y, ["Z"] = Z}
+	else
+		AccessoryTable.RootRotation = SerializeVector3(AccessoryTable.RootRotation)
+	end
+
+	if IncludeRevertC0 then
+		AccessoryTable.RevertC0 = SerializeCFrame(AccessoryTable.RevertC0 or AccessoryTable.OriginalC0)
+	end
+
+	AccessoryTable.OriginalC0 = SerializeCFrame(AccessoryTable.OriginalC0)
+
+	if AccessoryTable.DistanceFromOriginC0 then
+		AccessoryTable.DistanceFromOrigin = AccessoryTable.DistanceFromOriginC0
+		AccessoryTable.DistanceFromOriginC0 = nil
+	end
+	AccessoryTable.DistanceFromOrigin = SerializeVector3(AccessoryTable.DistanceFromOrigin)
+
+	AccessoryTable.OriginalC1 = SerializeCFrame(AccessoryTable.OriginalC1)
+
+	if AccessoryTable.RotationsApplied then
+		AccessoryTable.RotationsApplied = SerializeVector3(AccessoryTable.RotationsApplied)
+	end
+end
+
+local function DeserializeTransformData(AccessoryTable, IncludeRevertC0)
+	AccessoryTable.AccessoryWeld.C0 = DeserializeCFrame(AccessoryTable.AccessoryWeld.C0)
+	AccessoryTable.AccessoryWeld.C1 = DeserializeCFrame(AccessoryTable.AccessoryWeld.C1)
+
+	if IncludeRevertC0 then
+		AccessoryTable.RevertC0 = DeserializeCFrame(AccessoryTable.RevertC0 or AccessoryTable.OriginalC0)
+	end
+
+	AccessoryTable.OriginalC0 = DeserializeCFrame(AccessoryTable.OriginalC0)
+	if not AccessoryTable.RootRotation then
+		local X, Y, Z = AccessoryTable.OriginalC0:Inverse():ToEulerAnglesXYZ()
+		AccessoryTable.RootRotation = Vector3.new(X,Y,Z)
+	else
+		AccessoryTable.RootRotation = DeserializeVector3(AccessoryTable.RootRotation)
+	end
+
+	AccessoryTable.OriginalC1 = DeserializeCFrame(AccessoryTable.OriginalC1)
+
+	if AccessoryTable.DistanceFromOriginC0 then
+		AccessoryTable.DistanceFromOrigin = DeserializeVector3(AccessoryTable.DistanceFromOriginC0)
+		AccessoryTable.DistanceFromOriginC0 = nil
+	else
+		AccessoryTable.DistanceFromOrigin = DeserializeVector3(AccessoryTable.DistanceFromOrigin)
+	end
+
+	if AccessoryTable.RotationsApplied then
+		AccessoryTable.RotationsApplied = DeserializeVector3(AccessoryTable.RotationsApplied)
+	end
+end
+
+local function SerializeStandardAccessoryData(AccessoryTable, IncludeRevertC0)
+	if not AccessoryTable.OColor then AccessoryTable.OColor = Color3.new(1,1,1) end
+	AccessoryTable.OColor = SerializeColor3(AccessoryTable.OColor)
+
+	if not AccessoryTable.OriginalOColor then AccessoryTable.OriginalOColor = Color3.new(1,1,1) end
+	AccessoryTable.OriginalOColor = SerializeColor3(AccessoryTable.OriginalOColor)
+
+	if not AccessoryTable.ColorMode then AccessoryTable.ColorMode = "VertexColor" end
+	SerializeParticleData(AccessoryTable)
+
+	AccessoryTable.Object = nil
+	AccessoryTable.Color = SerializeVector3(AccessoryTable.Color)
+	AccessoryTable.OriginalColor = SerializeVector3(AccessoryTable.OriginalColor)
+	AccessoryTable.Material = SerializeMaterial(AccessoryTable.Material)
+	AccessoryTable.OriginalMaterial = SerializeMaterial(AccessoryTable.OriginalMaterial)
+	AccessoryTable.OriginalSize = SerializeVector3(AccessoryTable.OriginalSize)
+	AccessoryTable.HandleSize = SerializeVector3(AccessoryTable.HandleSize)
+
+	SerializeTransformData(AccessoryTable, IncludeRevertC0)
+
+	AccessoryTable.Scale = SerializeVector3(AccessoryTable.Scale)
+	AccessoryTable.RevertScale = SerializeVector3(AccessoryTable.RevertScale)
+	AccessoryTable.RootScale = SerializeVector3(AccessoryTable.RootScale)
+	AccessoryTable.Offset = SerializeVector3(AccessoryTable.Offset)
+
+	AccessoryTable.Attachment.Axis = SerializeVector3(AccessoryTable.Attachment.Axis)
+	AccessoryTable.Attachment.Orientation = SerializeVector3(AccessoryTable.Attachment.Orientation)
+	AccessoryTable.Attachment.SecondaryAxis = SerializeVector3(AccessoryTable.Attachment.SecondaryAxis)
+	AccessoryTable.Attachment.Position = SerializeVector3(AccessoryTable.Attachment.Position)
+
+	AccessoryTable.AttachmentForward = SerializeVector3(AccessoryTable.AttachmentForward)
+	AccessoryTable.AttachmentPos = SerializeVector3(AccessoryTable.AttachmentPos)
+	AccessoryTable.AttachmentRight = SerializeVector3(AccessoryTable.AttachmentRight)
+	AccessoryTable.AttachmentUp = SerializeVector3(AccessoryTable.AttachmentUp)
+end
+
+local function SerializeItemPackData(AccessoryTable)
+	AccessoryTable.Object = nil
+	SerializeTransformData(AccessoryTable, true)
+end
+
+local function SerializeMeshPartData(AccessoryTable)
+	if not AccessoryTable.OColor then AccessoryTable.OColor = Color3.new(1,1,1) end
+	AccessoryTable.OColor = SerializeColor3(AccessoryTable.OColor)
+
+	if not AccessoryTable.OriginalOColor then AccessoryTable.OriginalOColor = Color3.new(1,1,1) end
+	AccessoryTable.OriginalOColor = SerializeColor3(AccessoryTable.OriginalOColor)
+
+	AccessoryTable.Material = SerializeMaterial(AccessoryTable.Material)
+	AccessoryTable.OriginalMaterial = SerializeMaterial(AccessoryTable.OriginalMaterial)
+	SerializeParticleData(AccessoryTable)
+end
+
+function SerializeTable(Table) -- makes it so datastores can use them
+	print("Serializer")
+	if type(Table) == "string" then warn("Table is already serialized.") return Table end
+
+	local SlotValue = Table
+	for Index, AccessoryTable in pairs(SlotValue["Data"]["Accessories"]) do
+		if not AccessoryTable.IsItemPack and not AccessoryTable.IsMeshPart then
+			if typeof(AccessoryTable.AccessoryWeld.C0) == "table" then warn("Already serialized, breaking off.") break end
+			SerializeStandardAccessoryData(AccessoryTable, true)
+		elseif AccessoryTable.IsItemPack then
+			SerializeItemPackData(AccessoryTable)
+		elseif AccessoryTable.IsMeshPart then
+			if typeof(AccessoryTable.OColor) == "table" then warn("Already serialized, breaking off.") break end
+			SerializeMeshPartData(AccessoryTable)
+		end
+	end
+
+	Table = HttpService:JSONEncode(Table)
+	warn("TABLE SIZE:", #Table)
+	return Table
+end
+
+function SerializeAccessoryTable(Table) -- makes it so datastores can use them
+	print("Serializer", Table)
+	if type(Table) == "string" then warn("Table is already serialized.") return Table end
+
+	for Index, AccessoryTable in pairs(Table["Data"]) do
+		if not AccessoryTable.IsMeshPart then
+			if typeof(AccessoryTable.AccessoryWeld.C0) == "table" then warn("Already serialized, breaking off.") break end
+			SerializeStandardAccessoryData(AccessoryTable, false)
+		else
+			if typeof(AccessoryTable.OColor) == "table" then warn("Already serialized, breaking off.") break end
+			SerializeMeshPartData(AccessoryTable)
+		end
+	end
+
+	Table = HttpService:JSONEncode(Table)
+	return Table
+end
+
+function DeserializeTable_Old(Table)
+	print("DESERIALIZING TABLE")
+	if not Table then return end
+	if type(Table) == "string" then print("Have to decode it."); Table = HttpService:JSONDecode(Table) end
+
+
+	for Slot, SlotValue in pairs(Table) do
+
+		if SlotValue["Data"]["CharacterInformation"] == nil then
+			print("Old table pre-empowerment update.")
+			SlotValue["Data"]["CharacterName"] = nil;
+			SlotValue["Data"]["CharacterInformation"] = {
+				["CharacterName"] = "",
+				["CharacterBio"] = "",
+				["EmpowermentType"] = "",
+				["IsCustomEmpowerment"] = false,
+				["EmpowermentTitle"] = "",
+				["Empowerment"] = "",
+				["Skills"] = {
+					{}, {}, {}, {}, {}
+				}
+			}
+		end
+
+		for Index, AccessoryTable in pairs(SlotValue["Data"]["Accessories"]) do
+			if typeof(AccessoryTable["AccessoryWeld"]["C0"]) == "CFrame" then warn ("Already deserialized, breaking off.") return Table end
+
+			if AccessoryTable["Particle"] == nil then
+				AccessoryTable.Particle = "None"
+				AccessoryTable.ParticleColor = Color3.fromRGB(255,255,255)
+				AccessoryTable.ParticleSize = 0; AccessoryTable.ParticleTransparency = 0; AccessoryTable.ParticleRate = 0
+			else
+				AccessoryTable.ParticleColor = Color3.new(AccessoryTable.ParticleColor.R, AccessoryTable.ParticleColor.G, AccessoryTable.ParticleColor.B)
+				if AccessoryTable.ParticleSize == nil then
+					AccessoryTable.ParticleSize = 0; AccessoryTable.ParticleTransparency = 0; AccessoryTable.ParticleRate = 0
+				end
+			end
+
+			AccessoryTable["Color"] = Vector3.new(AccessoryTable["Color"]["X"], AccessoryTable["Color"]["Y"], AccessoryTable["Color"]["Z"])
+
+			AccessoryTable["OriginalColor"] = Vector3.new(AccessoryTable["OriginalColor"]["X"], AccessoryTable["OriginalColor"]["Y"], AccessoryTable["OriginalColor"]["Z"])
+
+
+
+			if AccessoryTable["Material"] == "Default" then
+				AccessoryTable["Material"] = Enum.Material.Plastic
+			elseif AccessoryTable["Material"] == "Electric"  then
+				AccessoryTable["Material"] = Enum.Material.ForceField
+			elseif AccessoryTable["Material"] == Enum.Material.Metal then
+				AccessoryTable["Material"] = "Metal"
+			else
+				AccessoryTable["Material"] = Enum.Material.Plastic
+			end;
+
+			if AccessoryTable["OriginalMaterial"] == "Default" then
+				AccessoryTable["OriginalMaterial"] = Enum.Material.Plastic
+			elseif AccessoryTable["OriginalMaterial"] == "Electric"  then
+				AccessoryTable["OriginalMaterial"] = Enum.Material.ForceField
+			elseif AccessoryTable["OriginalMaterial"] == "Metal"  then
+				AccessoryTable["OriginalMaterial"] = Enum.Material.Metal
+			else
+				AccessoryTable.OriginalMaterial = Enum.Material.Plastic
+			end;
+
+			AccessoryTable["OriginalSize"] = Vector3.new(AccessoryTable.OriginalSize.X, AccessoryTable.OriginalSize.Y, AccessoryTable.OriginalSize.Z)
+			AccessoryTable["HandleSize"] = Vector3.new(AccessoryTable.HandleSize.X, AccessoryTable.HandleSize.Y, AccessoryTable.HandleSize.Z)
+
+
+			AccessoryTable["AccessoryWeld"]["C0"] = 
+				CFrame.new(
+					AccessoryTable["AccessoryWeld"]["C0"]["X"],
+					AccessoryTable["AccessoryWeld"]["C0"]["Y"],
+					AccessoryTable["AccessoryWeld"]["C0"]["Z"],
+					AccessoryTable["AccessoryWeld"]["C0"]["R00"],
+					AccessoryTable["AccessoryWeld"]["C0"]["R01"],
+					AccessoryTable["AccessoryWeld"]["C0"]["R02"],
+					AccessoryTable["AccessoryWeld"]["C0"]["R10"],
+					AccessoryTable["AccessoryWeld"]["C0"]["R11"],
+					AccessoryTable["AccessoryWeld"]["C0"]["R12"],
+					AccessoryTable["AccessoryWeld"]["C0"]["R20"],
+					AccessoryTable["AccessoryWeld"]["C0"]["R21"],
+					AccessoryTable["AccessoryWeld"]["C0"]["R22"]
+				)
+
+			AccessoryTable["AccessoryWeld"]["C1"] = 
+				CFrame.new(
+					AccessoryTable["AccessoryWeld"]["C1"]["X"],
+					AccessoryTable["AccessoryWeld"]["C1"]["Y"],
+					AccessoryTable["AccessoryWeld"]["C1"]["Z"],
+					AccessoryTable["AccessoryWeld"]["C1"]["R00"],
+					AccessoryTable["AccessoryWeld"]["C1"]["R01"],
+					AccessoryTable["AccessoryWeld"]["C1"]["R02"],
+					AccessoryTable["AccessoryWeld"]["C1"]["R10"],
+					AccessoryTable["AccessoryWeld"]["C1"]["R11"],
+					AccessoryTable["AccessoryWeld"]["C1"]["R12"],
+					AccessoryTable["AccessoryWeld"]["C1"]["R20"],
+					AccessoryTable["AccessoryWeld"]["C1"]["R21"],
+					AccessoryTable["AccessoryWeld"]["C1"]["R22"]
+				)
+
+			if AccessoryTable["RevertC0"] then
+				AccessoryTable["RevertC0"] = CFrame.new(
+					AccessoryTable["RevertC0"]["X"],
+					AccessoryTable["RevertC0"]["Y"],
+					AccessoryTable["RevertC0"]["Z"],
+					AccessoryTable["RevertC0"]["R00"],
+					AccessoryTable["RevertC0"]["R01"],
+					AccessoryTable["RevertC0"]["R02"],
+					AccessoryTable["RevertC0"]["R10"],
+					AccessoryTable["RevertC0"]["R11"],
+					AccessoryTable["RevertC0"]["R12"],
+					AccessoryTable["RevertC0"]["R20"],
+					AccessoryTable["RevertC0"]["R21"],
+					AccessoryTable["RevertC0"]["R22"]
+				)
+			else
+				AccessoryTable["RevertC0"] = CFrame.new(
+					AccessoryTable["OriginalC0"]["X"],
+					AccessoryTable["OriginalC0"]["Y"],
+					AccessoryTable["OriginalC0"]["Z"],
+					AccessoryTable["OriginalC0"]["R00"],
+					AccessoryTable["OriginalC0"]["R01"],
+					AccessoryTable["OriginalC0"]["R02"],
+					AccessoryTable["OriginalC0"]["R10"],
+					AccessoryTable["OriginalC0"]["R11"],
+					AccessoryTable["OriginalC0"]["R12"],
+					AccessoryTable["OriginalC0"]["R20"],
+					AccessoryTable["OriginalC0"]["R21"],
+					AccessoryTable["OriginalC0"]["R22"]
+				)
+			end
+
+			AccessoryTable["OriginalC0"] = 
+				CFrame.new(
+					AccessoryTable["OriginalC0"]["X"],
+					AccessoryTable["OriginalC0"]["Y"],
+					AccessoryTable["OriginalC0"]["Z"],
+					AccessoryTable["OriginalC0"]["R00"],
+					AccessoryTable["OriginalC0"]["R01"],
+					AccessoryTable["OriginalC0"]["R02"],
+					AccessoryTable["OriginalC0"]["R10"],
+					AccessoryTable["OriginalC0"]["R11"],
+					AccessoryTable["OriginalC0"]["R12"],
+					AccessoryTable["OriginalC0"]["R20"],
+					AccessoryTable["OriginalC0"]["R21"],
+					AccessoryTable["OriginalC0"]["R22"]
+				)
+
+
+			if not AccessoryTable.RootRotation then
+				local X,Y,Z = AccessoryTable.OriginalC0:Inverse():ToEulerAnglesXYZ()
+				AccessoryTable.RootRotation = Vector3.new(X,Y,Z)
+			else
+				AccessoryTable.RootRotation = Vector3.new(AccessoryTable.RootRotation.X, AccessoryTable.RootRotation.Y, AccessoryTable.RootRotation.Z)
+			end
+
+			AccessoryTable["OriginalC1"] = 
+				CFrame.new(
+					AccessoryTable["OriginalC1"]["X"],
+					AccessoryTable["OriginalC1"]["Y"],
+					AccessoryTable["OriginalC1"]["Z"],
+					AccessoryTable["OriginalC1"]["R00"],
+					AccessoryTable["OriginalC1"]["R01"],
+					AccessoryTable["OriginalC1"]["R02"],
+					AccessoryTable["OriginalC1"]["R10"],
+					AccessoryTable["OriginalC1"]["R11"],
+					AccessoryTable["OriginalC1"]["R12"],
+					AccessoryTable["OriginalC1"]["R20"],
+					AccessoryTable["OriginalC1"]["R21"],
+					AccessoryTable["OriginalC1"]["R22"]
+				)
+
+			if AccessoryTable.DistanceFromOriginC0 then
+				AccessoryTable.DistanceFromOrigin = 
+					Vector3.new(
+						AccessoryTable["DistanceFromOriginC0"].X,
+						AccessoryTable["DistanceFromOriginC0"].Y,
+						AccessoryTable["DistanceFromOriginC0"].Z
+					)
+				AccessoryTable.DistanceFromOriginC0 = nil
+			else
+				AccessoryTable["DistanceFromOrigin"] =
+					Vector3.new(
+						AccessoryTable["DistanceFromOrigin"].X,
+						AccessoryTable["DistanceFromOrigin"].Y,
+						AccessoryTable["DistanceFromOrigin"].Z
+					)
+			end
+
+
+
+			if AccessoryTable.RotationsApplied then
+				AccessoryTable["RotationsApplied"] = 
+					Vector3.new(
+						AccessoryTable["RotationsApplied"].X,
+						AccessoryTable["RotationsApplied"].Y,
+						AccessoryTable["RotationsApplied"].Z
+					)
+			end
+
+			AccessoryTable["Scale"] = Vector3.new(
+				AccessoryTable["Scale"].X,
+				AccessoryTable["Scale"].Y,
+				AccessoryTable["Scale"].Z
+			)
+			AccessoryTable["RootScale"] = Vector3.new(
+				AccessoryTable["RootScale"].X,
+				AccessoryTable["RootScale"].Y,
+				AccessoryTable["RootScale"].Z
+			);
+			AccessoryTable["RevertScale"] = Vector3.new(
+				AccessoryTable["RevertScale"].X,
+				AccessoryTable["RevertScale"].Y,
+				AccessoryTable["RevertScale"].Z
+			);
+			AccessoryTable["Offset"] = Vector3.new(
+				AccessoryTable["Offset"].X,
+				AccessoryTable["Offset"].Y,
+				AccessoryTable["Offset"].Z
+			)
+
+			AccessoryTable["Attachment"]["Axis"] = Vector3.new(
+				AccessoryTable["Attachment"]["Axis"].X,
+				AccessoryTable["Attachment"]["Axis"].Y,
+				AccessoryTable["Attachment"]["Axis"].Z
+			)
+
+			AccessoryTable["Attachment"]["SecondaryAxis"] = Vector3.new(
+				AccessoryTable["Attachment"]["SecondaryAxis"].X,
+				AccessoryTable["Attachment"]["SecondaryAxis"].Y,
+				AccessoryTable["Attachment"]["SecondaryAxis"].Z
+			)
+
+			AccessoryTable["Attachment"]["Position"] = Vector3.new(
+				AccessoryTable["Attachment"]["Position"].X,
+				AccessoryTable["Attachment"]["Position"].Y,
+				AccessoryTable["Attachment"]["Position"].Z
+			)
+
+			AccessoryTable["Attachment"]["Orientation"] = Vector3.new(
+				AccessoryTable["Attachment"]["Orientation"].X,
+				AccessoryTable["Attachment"]["Orientation"].Y,
+				AccessoryTable["Attachment"]["Orientation"].Z
+			)
+
+			AccessoryTable["AttachmentForward"] = Vector3.new(
+				AccessoryTable["AttachmentForward"].X,
+				AccessoryTable["AttachmentForward"].Y,
+				AccessoryTable["AttachmentForward"].Z
+			)
+
+			AccessoryTable["AttachmentPos"] = Vector3.new(
+				AccessoryTable["AttachmentPos"].X,
+				AccessoryTable["AttachmentPos"].Y,
+				AccessoryTable["AttachmentPos"].Z
+			)
+
+			AccessoryTable["AttachmentUp"] = Vector3.new(
+				AccessoryTable["AttachmentUp"].X,
+				AccessoryTable["AttachmentUp"].Y,
+				AccessoryTable["AttachmentUp"].Z
+			)
+
+			AccessoryTable["AttachmentRight"] = Vector3.new(
+				AccessoryTable["AttachmentRight"].X,
+				AccessoryTable["AttachmentRight"].Y,
+				AccessoryTable["AttachmentRight"].Z
+			)
+
+
+		end
+	end
+	return Table
+end
+
+local function DeserializeStandardAccessoryData(AccessoryTable, IncludeRevertC0)
+	if not AccessoryTable.OColor then AccessoryTable.OColor = {R = 1, G = 1, B = 1} end
+	AccessoryTable.OColor = DeserializeColor3(AccessoryTable.OColor)
+
+	if not AccessoryTable.ColorMode then AccessoryTable.ColorMode = "VertexColor" end
+	if not AccessoryTable.OTransparency then AccessoryTable.OTransparency = 0.5 end
+
+	if not AccessoryTable.OriginalOColor then AccessoryTable.OriginalOColor = {R = 1, G = 1, B = 1} end
+	AccessoryTable.OriginalOColor = DeserializeColor3(AccessoryTable.OriginalOColor)
+
+	DeserializeParticleData(AccessoryTable)
+
+	AccessoryTable.Color = DeserializeVector3(AccessoryTable.Color)
+	AccessoryTable.OriginalColor = DeserializeVector3(AccessoryTable.OriginalColor)
+	AccessoryTable.Material = DeserializeMaterial(AccessoryTable.Material)
+	AccessoryTable.OriginalMaterial = DeserializeMaterial(AccessoryTable.OriginalMaterial)
+	AccessoryTable.OriginalSize = DeserializeVector3(AccessoryTable.OriginalSize)
+	AccessoryTable.HandleSize = DeserializeVector3(AccessoryTable.HandleSize)
+
+	DeserializeTransformData(AccessoryTable, IncludeRevertC0)
+
+	AccessoryTable.Scale = DeserializeVector3(AccessoryTable.Scale)
+	AccessoryTable.RootScale = DeserializeVector3(AccessoryTable.RootScale)
+	AccessoryTable.RevertScale = DeserializeVector3(AccessoryTable.RevertScale)
+	AccessoryTable.Offset = DeserializeVector3(AccessoryTable.Offset)
+
+	AccessoryTable.Attachment.Axis = DeserializeVector3(AccessoryTable.Attachment.Axis)
+	AccessoryTable.Attachment.SecondaryAxis = DeserializeVector3(AccessoryTable.Attachment.SecondaryAxis)
+	AccessoryTable.Attachment.Position = DeserializeVector3(AccessoryTable.Attachment.Position)
+	AccessoryTable.Attachment.Orientation = DeserializeVector3(AccessoryTable.Attachment.Orientation)
+
+	AccessoryTable.AttachmentForward = DeserializeVector3(AccessoryTable.AttachmentForward)
+	AccessoryTable.AttachmentPos = DeserializeVector3(AccessoryTable.AttachmentPos)
+	AccessoryTable.AttachmentUp = DeserializeVector3(AccessoryTable.AttachmentUp)
+	AccessoryTable.AttachmentRight = DeserializeVector3(AccessoryTable.AttachmentRight)
+end
+
+local function DeserializeItemPackData(AccessoryTable)
+	DeserializeTransformData(AccessoryTable, true)
+end
+
+local function DeserializeMeshPartData(AccessoryTable, SetColorMode)
+	if not AccessoryTable.OColor then AccessoryTable.OColor = {R = 1, G = 1, B = 1} end
+	AccessoryTable.OColor = DeserializeColor3(AccessoryTable.OColor)
+
+	if SetColorMode and not AccessoryTable.ColorMode then
+		AccessoryTable.ColorMode = "VertexColor"
+	end
+
+	if not AccessoryTable.OriginalOColor then AccessoryTable.OriginalOColor = {R = 1, G = 1, B = 1} end
+	AccessoryTable.OriginalOColor = DeserializeColor3(AccessoryTable.OriginalOColor)
+
+	AccessoryTable.Material = DeserializeMaterial(AccessoryTable.Material)
+	AccessoryTable.OriginalMaterial = DeserializeMaterial(AccessoryTable.OriginalMaterial)
+	DeserializeParticleData(AccessoryTable)
+end
+
+function DeserializeTable(Table)
+	print("DESERIALIZING TABLE")
+	if not Table then return end
+	if type(Table) == "string" then print("Have to decode it."); Table = HttpService:JSONDecode(Table) end
+
+	local SlotValue = Table
+	if SlotValue["Data"] == nil and #SlotValue > 0 then SlotValue = SlotValue[1] end -- outfit ids used to have a bug where it was a table inside a table rather than just a table like every other save
+
+	if SlotValue["Data"]["CharacterInformation"] == nil then
+		print("Old table pre-empowerment update.")
+		SlotValue["Data"]["CharacterName"] = nil
+		SlotValue["Data"]["CharacterInformation"] = {
+			["CharacterName"] = "",
+			["CharacterBio"] = "",
+			["EmpowermentType"] = "",
+			["IsCustomEmpowerment"] = false,
+			["EmpowermentTitle"] = "",
+			["Empowerment"] = "",
+			["Skills"] = {{}, {}, {}, {}, {}}
+		}
+	end
+
+	for Index, AccessoryTable in pairs(SlotValue["Data"]["Accessories"]) do
+		if not AccessoryTable.IsItemPack and not AccessoryTable.IsMeshPart then
+			if typeof(AccessoryTable.AccessoryWeld.C0) == "CFrame" then warn("Already deserialized, breaking off.") return Table end
+			DeserializeStandardAccessoryData(AccessoryTable, true)
+		elseif AccessoryTable.IsItemPack then
+			DeserializeItemPackData(AccessoryTable)
+		elseif AccessoryTable.IsMeshPart then
+			if typeof(AccessoryTable.OColor) == "Color3" then warn("Already deserialized, breaking off.") return Table end
+			DeserializeMeshPartData(AccessoryTable, true)
+		end
+	end
+
+	warn("STILL EXISTS?", SlotValue)
+	return SlotValue
+end
+
+function DeserializeAccessoryTable(Table)
+	if not Table then return end
+	if type(Table) == "string" then print("Have to decode it."); Table = HttpService:JSONDecode(Table) end
+
+	for Index, AccessoryTable in pairs(Table["Data"]) do
+		if not AccessoryTable.IsMeshPart then
+			if typeof(AccessoryTable.AccessoryWeld.C0) == "CFrame" then warn("Already deserialized, breaking off.") return Table end
+			DeserializeStandardAccessoryData(AccessoryTable, false)
+		else
+			if typeof(AccessoryTable.OColor) == "Color3" then warn("Already deserialized, breaking off.") return Table end
+			DeserializeMeshPartData(AccessoryTable, false)
+		end
+	end
+
+	return Table
 end
 
 local CachedAccessoriesUniversal= {}
 
-local TARGET_HEAD_ASSET_ID = AccessoryScaling.TargetHeadAssetId
-local HEAD_SCALE_MULTIPLIER = AccessoryScaling.HeadScaleMultiplier
+local TARGET_HEAD_ASSET_ID = "2432102561"
+local HEAD_SCALE_MULTIPLIER = 1
 
 local function MeshIdMatches(meshId, targetId)
-	return AccessoryScaling.MeshIdMatches(meshId, targetId)
+	return tostring(meshId):find(targetId, 1, true) ~= nil
+end
+
+local EXTERNAL_HEAD_BOOST = 1.058
+local HEAD_ACCESSORY_COUNTER_SCALE = 1 / EXTERNAL_HEAD_BOOST
+
+local function ScaleVector3(v, multiplier)
+	return Vector3.new(
+		v.X * multiplier,
+		v.Y * multiplier,
+		v.Z * multiplier
+	)
 end
 
 local function ApplyHeadBoostAccessoryScale(AccessoryTable, NewAccessory, NewMesh)
-	return AccessoryScaling.ApplyHeadBoostAccessoryScale(AccessoryTable, NewAccessory, NewMesh)
+	if not AccessoryTable or not NewAccessory or not NewMesh then
+		return
+	end
+
+	local savedMeshScale = AccessoryTable.Scale
+	local savedHandleSize = AccessoryTable.HandleSize
+
+	if not savedMeshScale or not savedHandleSize then
+		return
+	end
+
+	-- This still tells the other server script not to shrink it again.
+	NewAccessory:SetAttribute("HeadScaleHandledByCustomizer", true)
+
+	-- IMPORTANT:
+	-- On load, use the saved visual size directly.
+	-- Do NOT counter-scale here.
+	NewAccessory.Handle.Size = savedHandleSize
+	NewMesh.Scale = savedMeshScale
+
+	if MeshIdMatches(AccessoryTable["MeshId"], TARGET_HEAD_ASSET_ID) then
+		-- Keep custom head unmodified here because the other server script handles actual head boost.
+		NewAccessory.Handle.Size = savedHandleSize
+		NewMesh.Scale = savedMeshScale
+	end
+end
+
+local function GetAccessoryMeshId(accessory)
+	if not accessory then return "" end
+
+	local handle = accessory:FindFirstChild("Handle")
+	if not handle then return "" end
+
+	local specialMesh = handle:FindFirstChildOfClass("SpecialMesh")
+	if specialMesh then
+		return specialMesh.MeshId
+	end
+
+	if handle:IsA("MeshPart") then
+		return handle.MeshId
+	end
+
+	return ""
+end
+
+local function IsLiveHeadAccessory(accessory, character)
+	if not accessory or not character then
+		return false
+	end
+
+	local handle = accessory:FindFirstChild("Handle")
+	local head = character:FindFirstChild("Head")
+
+	if not handle or not head then
+		return false
+	end
+
+	-- If this accessory is the custom head itself, do NOT shrink it.
+	if MeshIdMatches(GetAccessoryMeshId(accessory), TARGET_HEAD_ASSET_ID) then
+		return false
+	end
+
+	-- Check the weld after Humanoid:AddAccessory.
+	local weld = handle:FindFirstChildOfClass("Weld")
+	if weld then
+		if weld.Part0 == head or weld.Part1 == head then
+			return true
+		end
+
+		if weld.Part0 and weld.Part0.Name == "Head" then
+			return true
+		end
+
+		if weld.Part1 and weld.Part1.Name == "Head" then
+			return true
+		end
+	end
+
+	-- Attachment fallback.
+	for _, child in ipairs(handle:GetChildren()) do
+		if child:IsA("Attachment") and head:FindFirstChild(child.Name) then
+			return true
+		end
+	end
+
+	return false
 end
 
 local function ApplyLiveInsertedHeadAccessoryCounterScale(accessory, character)
-	return AccessoryScaling.ApplyLiveInsertedHeadAccessoryCounterScale(accessory, character)
+	if not accessory or not character then
+		return
+	end
+
+	if accessory:GetAttribute("HeadScaleHandledByCustomizer") then
+		return
+	end
+
+	if not IsLiveHeadAccessory(accessory, character) then
+		return
+	end
+
+	local handle = accessory:FindFirstChild("Handle")
+	if not handle then
+		return
+	end
+
+	local specialMesh = handle:FindFirstChildOfClass("SpecialMesh")
+
+	-- Store the original/base scale before visually counter-scaling.
+	-- This helps prevent save/load from treating the shrunken scale as the new original.
+	if specialMesh then
+		if not accessory:GetAttribute("BaseMeshScaleX") then
+			accessory:SetAttribute("BaseMeshScaleX", specialMesh.Scale.X)
+			accessory:SetAttribute("BaseMeshScaleY", specialMesh.Scale.Y)
+			accessory:SetAttribute("BaseMeshScaleZ", specialMesh.Scale.Z)
+		end
+
+		specialMesh.Scale = ScaleVector3(
+			Vector3.new(
+				accessory:GetAttribute("BaseMeshScaleX"),
+				accessory:GetAttribute("BaseMeshScaleY"),
+				accessory:GetAttribute("BaseMeshScaleZ")
+			),
+			HEAD_ACCESSORY_COUNTER_SCALE
+		)
+	else
+		if not accessory:GetAttribute("BaseHandleSizeX") then
+			accessory:SetAttribute("BaseHandleSizeX", handle.Size.X)
+			accessory:SetAttribute("BaseHandleSizeY", handle.Size.Y)
+			accessory:SetAttribute("BaseHandleSizeZ", handle.Size.Z)
+		end
+
+		handle.Size = ScaleVector3(
+			Vector3.new(
+				accessory:GetAttribute("BaseHandleSizeX"),
+				accessory:GetAttribute("BaseHandleSizeY"),
+				accessory:GetAttribute("BaseHandleSizeZ")
+			),
+			HEAD_ACCESSORY_COUNTER_SCALE
+		)
+	end
+
+	accessory:SetAttribute("HeadCounterScaledLiveInsert", true)
+	accessory:SetAttribute("HeadScaleHandledByCustomizer", true)
 end
 
 
 local function ApplyParticleColor(AccessoryTable, ParticleEmitter)
-	return ParticleService.ApplyParticleColor(AccessoryTable, ParticleEmitter)
+	local startColor = AccessoryTable.ParticleColor
+	if ParticleEmitter.Name == "Fire" and startColor ~= Color3.new(1,1,1) then
+		ParticleEmitter.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, startColor),
+			ColorSequenceKeypoint.new(0.5, Color3.new(startColor.R, startColor.G/3, startColor.B/3)),
+			ColorSequenceKeypoint.new(1, Color3.new(startColor.R, startColor.G/10, startColor.B/10))
+		})
+	else
+		ParticleEmitter.Color = ColorSequence.new{
+			ColorSequenceKeypoint.new(0, startColor),
+			ColorSequenceKeypoint.new(1, startColor)
+		}
+	end
 end
 
 local function ConfigureParticleEmitter(AccessoryTable, P)
-	return ParticleService.ConfigureParticleEmitter(AccessoryTable, P)
+	if P.Name ~= "Fire" then
+		AccessoryTable.ParticleRate = math.clamp(AccessoryTable.ParticleRate, 0, 50)
+	end
+
+	if P.Name == "GentleAura" then
+		P.Rate = AccessoryTable.ParticleRate
+		P.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0,1),
+			NumberSequenceKeypoint.new(0.5,AccessoryTable.ParticleTransparency),
+			NumberSequenceKeypoint.new(1,1)
+		})
+		P.Size = NumberSequence.new({
+			NumberSequenceKeypoint.new(0,AccessoryTable.ParticleSize),
+			NumberSequenceKeypoint.new(1,AccessoryTable.ParticleSize)
+		})
+	elseif P.Name == "HardSmoke" then
+		P.Rate = AccessoryTable.ParticleRate
+		P.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0,1),
+			NumberSequenceKeypoint.new(0.5,AccessoryTable.ParticleTransparency),
+			NumberSequenceKeypoint.new(1,1)
+		})
+		P.Size = NumberSequence.new({
+			NumberSequenceKeypoint.new(0,0.3),
+			NumberSequenceKeypoint.new(0.3,AccessoryTable.ParticleSize),
+			NumberSequenceKeypoint.new(1,math.clamp(AccessoryTable.ParticleSize-0.1, 0.1, math.huge), 0.5)
+		})
+	elseif P.Name == "SoftSmoke" then
+		P.Rate = AccessoryTable.ParticleRate
+		P.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0,1),
+			NumberSequenceKeypoint.new(0.5,AccessoryTable.ParticleTransparency),
+			NumberSequenceKeypoint.new(1,1)
+		})
+		P.Size = NumberSequence.new({
+			NumberSequenceKeypoint.new(0,0.3),
+			NumberSequenceKeypoint.new(0.3,AccessoryTable.ParticleSize),
+			NumberSequenceKeypoint.new(1,AccessoryTable.ParticleSize+0.4, 0.5)
+		})
+	elseif P.Name == "Lightning" then
+		P.Rate = AccessoryTable.ParticleRate
+		P.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0,AccessoryTable.ParticleTransparency),
+			NumberSequenceKeypoint.new(1,AccessoryTable.ParticleTransparency)
+		})
+		P.Size = NumberSequence.new({
+			NumberSequenceKeypoint.new(0,AccessoryTable.ParticleSize, 0.75),
+			NumberSequenceKeypoint.new(0.3,AccessoryTable.ParticleSize+0.75,0.5),
+			NumberSequenceKeypoint.new(0.5,math.abs(AccessoryTable.ParticleSize-0.25),0.375),
+			NumberSequenceKeypoint.new(0.7,AccessoryTable.ParticleSize+0.75,0.5),
+			NumberSequenceKeypoint.new(1,AccessoryTable.ParticleSize, 0.75)
+		})
+	elseif P.Name == "Fire" then
+		P.Rate = AccessoryTable.ParticleRate
+		P.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0,AccessoryTable.ParticleTransparency),
+			NumberSequenceKeypoint.new(1,AccessoryTable.ParticleTransparency)
+		})
+		P.Size = NumberSequence.new({
+			NumberSequenceKeypoint.new(0,AccessoryTable.ParticleSize),
+			NumberSequenceKeypoint.new(1,0)
+		})
+	end
 end
 
 local function ApplyParticleData(AccessoryTable, Handle)
-	return ParticleService.ApplyParticleData(AccessoryTable, Handle, ParticlesFolder)
+	if AccessoryTable.Particle == "None" then
+		return
+	end
+
+	local Found = ParticlesFolder:FindFirstChild(AccessoryTable.Particle)
+	if not Found then
+		return
+	end
+
+	Found = Found:Clone()
+	Found.Parent = Handle
+	Found.Enabled = true
+	ApplyParticleColor(AccessoryTable, Found)
+	ConfigureParticleEmitter(AccessoryTable, Found)
 end
 
 local function GetClassicClothingTemplate(assetId, className, templateProperty)
-	return ClothingService.GetClassicClothingTemplate(assetId, className, templateProperty, InsertService)
+	local success, template = pcall(function()
+		local asset = InsertService:LoadAsset(assetId)
+		if asset then
+			local clothing = asset:FindFirstChildOfClass(className)
+			if clothing then
+				local result = clothing[templateProperty]
+				asset:Destroy()
+				return result
+			else
+				return false
+			end
+		else
+			return false
+		end
+	end)
+
+	if success then
+		if template then
+			return template
+		else
+			return false
+		end
+	end
 end
 
 function LoadCharacter(Player, SlotData)
-	return CharacterLoadService.LoadCharacter(Player, SlotData, {
-		HttpService = HttpService,
-		ReplicatedStorage = ReplicatedStorage,
-		GetClassicClothingTemplate = GetClassicClothingTemplate,
-		IsOccupiedSkills = IsOccupiedSkills,
-		DefaultType = DefaultType,
-		DefaultProportion = DefaultProportion,
-		HeadScaleMultiplier = HEAD_SCALE_MULTIPLIER,
-		FindToolFromItem = FindToolFromItem,
-		DefaultAccessory = DefaultAccessory,
-		ApplyHeadBoostAccessoryScale = ApplyHeadBoostAccessoryScale,
-		MeshIdMatches = MeshIdMatches,
-		TargetHeadAssetId = TARGET_HEAD_ASSET_ID,
-		CreateOverlay = CreateOverlay,
-		ApplyParticleData = ApplyParticleData,
-		InsertService = InsertService,
-		SpawnGamepassItem = script.Parent.SpawnGamepassItem,
-	})
+
+	print("Load Character", Player, SlotData)
+	warn(Player.Name, "Save Data amount:", #HttpService:JSONEncode(SlotData))
+	SlotData = SlotData["Data"]
+
+	local Character = Player.Character
+
+	if Character:FindFirstChild("Shirt") == nil then local s = Instance.new("Shirt", Character); s.Name = "Shirt" end
+	if Character:FindFirstChild("Pants") == nil then local p = Instance.new("Pants", Character); p.Name = "Pants" end
+
+	local function HideCollisionParts(Character)
+		for _, obj in ipairs(Character:GetDescendants()) do
+			if obj.Name == "CollisionPart" and obj:IsA("BasePart") then
+				obj.Transparency = 1
+				obj.CastShadow = false
+			end
+		end
+	end
+
+	if tonumber(SlotData["ShirtTemplate"]) then
+		local id = GetClassicClothingTemplate(SlotData["ShirtTemplate"], "Shirt", "ShirtTemplate")
+
+		Character.Shirt.ShirtTemplate = id or "http://www.roblox.com/asset/?id=5574405815"
+	else
+		Character.Shirt.ShirtTemplate = SlotData["ShirtTemplate"] or "http://www.roblox.com/asset/?id=5574405815"
+	end
+
+	if tonumber(SlotData["PantsTemplate"]) then
+		local id = GetClassicClothingTemplate(SlotData["PantsTemplate"], "Pants", "PantsTemplate")
+		Character.Pants.PantsTemplate = id or "http://www.roblox.com/asset/?id=5574405815"
+	else
+		Character.Pants.PantsTemplate = SlotData["PantsTemplate"] or "http://www.roblox.com/asset/?id=5574420285"
+	end
+
+
+
+
+
+	-- PUT SOME CODE FOR THE NAME AND BIO SYSTEM
+
+	if SlotData["CharacterInformation"] == nil then
+		SlotData["CharacterInformation"] = {
+			["CharacterName"] = "",
+			["CharacterBio"] = "",
+			["CharacterImg"] = "",
+			["EmpowermentType"] = "",
+			["Empowerment"] = "",
+			["EmpowermentTitle"] = "",
+			["IsCustomEmpowerment"] =false,
+			["Skills"] = {
+				{}, {}, {}, {}, {}
+			}
+		}
+	end
+
+	local Folder = ReplicatedStorage.Info[Player.Name]
+	Folder.CName.Value = SlotData["CharacterInformation"]["CharacterName"]
+	Folder.CBio.Value = SlotData["CharacterInformation"]["CharacterBio"]
+	if SlotData["CharacterInformation"]["CharacterImg"] == nil then SlotData["CharacterInformation"]["CharacterImg"] = 0 end
+	if SlotData["CharacterInformation"]["CharacterImg"] ~= 0 then
+		Folder.CImage.Value = SlotData["CharacterInformation"]["CharacterImg"]
+	end
+	Folder.EmpowermentTitle.Value = SlotData["CharacterInformation"]["EmpowermentTitle"]
+	Folder.EmpowermentType.Value = SlotData["CharacterInformation"]["EmpowermentType"]
+	Folder.Empowerment.Value = SlotData["CharacterInformation"]["Empowerment"]
+
+
+	for i = 1, 5, 1 do 
+		local val = SlotData["CharacterInformation"].Skills[i]
+		warn("SKILL SLOT:", i, "VAL:", val)
+		if IsOccupiedSkills(val) then
+			print("MORE THAN 0, HAS INFO")
+			Folder["Skill" .. tostring(i) .. "Type"].Value = val.Type
+			Folder["Skill" .. tostring(i) .. "Title"].Value = val.Title
+			Folder["Skill" .. tostring(i) .. "Description"].Value = val.Skill
+		else
+			print("REMOVE")
+			Folder["Skill" .. tostring(i) .. "Type"].Value = ""
+			Folder["Skill" .. tostring(i) .. "Title"].Value = ""
+			Folder["Skill" .. tostring(i) .. "Description"].Value = ""
+		end
+	end
+
+	local Humanoid = Character.Humanoid
+	Humanoid.BodyWidthScale.Value = SlotData["Scale"]["Width"]
+	Humanoid.BodyHeightScale.Value = SlotData["Scale"]["Height"]
+	Humanoid.BodyDepthScale.Value = SlotData["Scale"]["Depth"]
+	Humanoid.BodyTypeScale.Value = DefaultType
+	Humanoid.BodyProportionScale.Value = DefaultProportion
+	local boostedHeadScale = (SlotData["Scale"]["Head"] or 1) * HEAD_SCALE_MULTIPLIER
+	Humanoid.HeadScale.Value = boostedHeadScale
+
+	local Description = Humanoid:GetAppliedDescription()
+	Description.RunAnimation = SlotData.Animations.RunAnimation
+	Description.IdleAnimation = SlotData.Animations.IdleAnimation
+	Description.WalkAnimation = SlotData.Animations.WalkAnimation
+	Description.HeightScale = SlotData.Scale.Height
+	Description.HeadScale = boostedHeadScale
+	Description.DepthScale = SlotData.Scale.Depth
+	Description.WidthScale = SlotData.Scale.Width
+
+	Humanoid:ApplyDescription(Description)
+
+	Humanoid.BodyWidthScale.Value = SlotData["Scale"]["Width"]-0.01
+	Humanoid.BodyHeightScale.Value = SlotData["Scale"]["Height"]-0.01
+	Humanoid.BodyDepthScale.Value = SlotData["Scale"]["Depth"]-0.01
+	Humanoid.BodyTypeScale.Value = 0.8-0.01
+	Humanoid.HeadScale.Value = boostedHeadScale - 0.01
+
+	Humanoid.BodyWidthScale.Value = SlotData["Scale"]["Width"]
+	Humanoid.BodyHeightScale.Value = SlotData["Scale"]["Height"]
+	Humanoid.BodyDepthScale.Value = SlotData["Scale"]["Depth"]
+	Humanoid.BodyTypeScale.Value = DefaultType
+	Humanoid.BodyProportionScale.Value = DefaultProportion
+	Humanoid.HeadScale.Value = boostedHeadScale
+
+	Character.Head.face.Texture = "rbxthumb://type=Asset&id=" .. tostring(SlotData["FaceID"]) .. "&w=420&h=420"
+
+	Character["Body Colors"].HeadColor3 = Color3.new(SlotData.BodyColors.Head.R, SlotData.BodyColors.Head.G, SlotData.BodyColors.Head.B)
+	Character["Body Colors"].RightArmColor3 = Color3.new(SlotData.BodyColors.RightArm.R, SlotData.BodyColors.RightArm.G, SlotData.BodyColors.RightArm.B)
+	Character["Body Colors"].LeftArmColor3 = Color3.new(SlotData.BodyColors.LeftArm.R, SlotData.BodyColors.LeftArm.G, SlotData.BodyColors.LeftArm.B)
+	Character["Body Colors"].TorsoColor3 = Color3.new(SlotData.BodyColors.Torso.R, SlotData.BodyColors.Torso.G, SlotData.BodyColors.Torso.B)
+	Character["Body Colors"].RightLegColor3 = Color3.new(SlotData.BodyColors.RightLeg.R, SlotData.BodyColors.RightLeg.G, SlotData.BodyColors.RightLeg.B)
+	Character["Body Colors"].LeftLegColor3 = Color3.new(SlotData.BodyColors.LeftLeg.R, SlotData.BodyColors.LeftLeg.G, SlotData.BodyColors.LeftLeg.B)
+
+	for i, v in pairs(Character:GetChildren()) do
+		if v:IsA("BasePart") or v:IsA("MeshPart") then
+			if v.Name ~= "HumanoidRootPart" then
+				v.Transparency = 0
+			end
+		end
+	end
+
+	for LimbName, v in pairs(SlotData["LimbRemover"]) do
+		if v == true then
+			local Limb = Character:FindFirstChild(LimbName)
+			if Limb then
+				Limb.Transparency = 1
+			end
+		end
+	end
+
+	for i, Accessory in pairs(Character:GetChildren()) do
+		if Accessory:IsA("Accessory") then
+			Accessory:Destroy()
+		elseif Accessory:GetAttribute("displayAccessory") == true  then
+
+			FindToolFromItem(Player, Accessory):Destroy()
+			Accessory:Destroy()
+		end
+	end
+
+
+	local NewAccessoryTable = {}
+	local IsIncorrectIndex = false
+	for i, AccessoryTable in pairs(SlotData["Accessories"]) do
+		--print("i:", i, "table:", AccessoryTable)
+		if not tonumber(i) then
+			IsIncorrectIndex = true
+		end
+		if AccessoryTable.DistanceFromOriginC0 then
+			AccessoryTable.DistanceFromOrigin = AccessoryTable.DistanceFromOriginC0
+			AccessoryTable.DistanceFromOriginC0 = nil
+		end
+
+		if not AccessoryTable.IsItemPack and not AccessoryTable.IsMeshPart then -- regular accessories
+
+			local NewAccessory = DefaultAccessory:Clone()
+			NewAccessory.Name = AccessoryTable.Name
+			NewAccessory.AttachmentForward = AccessoryTable.AttachmentForward
+			NewAccessory.AttachmentPos = AccessoryTable.AttachmentPos
+			NewAccessory.AttachmentRight = AccessoryTable.AttachmentRight
+			NewAccessory.AttachmentUp = AccessoryTable.AttachmentUp
+
+			AccessoryTable.Object = NewAccessory
+			NewAccessory.Handle.OriginalSize.Value = AccessoryTable["OriginalSize"]
+
+
+			NewAccessory.Handle.Size = AccessoryTable.HandleSize
+			NewAccessory.Handle.Color = Color3.new(AccessoryTable.Color.X, AccessoryTable.Color.Y, AccessoryTable.Color.Z)
+
+			local NewAttachment = NewAccessory.Handle:FindFirstChildOfClass("Attachment")
+			NewAttachment.Name = AccessoryTable.Attachment.Name
+			NewAttachment.Axis = AccessoryTable.Attachment.Axis
+			NewAttachment.SecondaryAxis = AccessoryTable.Attachment.SecondaryAxis
+			NewAttachment.Position = AccessoryTable.Attachment.Position
+			NewAttachment.Orientation = AccessoryTable.Attachment.Orientation
+
+			local NewMesh = NewAccessory.Handle:FindFirstChildOfClass("SpecialMesh")
+
+			NewMesh.MeshId = AccessoryTable["MeshId"]
+			NewMesh.TextureId = AccessoryTable.TextureId
+
+			NewMesh.Offset = AccessoryTable.Offset
+			ApplyHeadBoostAccessoryScale(AccessoryTable, NewAccessory, NewMesh)
+
+			if MeshIdMatches(AccessoryTable["MeshId"], TARGET_HEAD_ASSET_ID) then
+				local collisionPart = NewAccessory:FindFirstChild("CollisionPart", true)
+				if collisionPart and collisionPart:IsA("BasePart") then
+					collisionPart.Transparency = 1
+					collisionPart.CastShadow = false
+				end
+			end
+
+			NewAccessory.Handle.Transparency = AccessoryTable["Transparency"]
+			NewAccessory.Handle.Material = AccessoryTable.Material
+
+			NewAccessory.Parent = workspace
+			Character.Humanoid:AddAccessory(NewAccessory)
+
+			local NewWeld = NewAccessory.Handle:FindFirstChildOfClass("Weld")
+			NewWeld.Part1 = Character:FindFirstChild(AccessoryTable["WeldPart"])
+
+			NewMesh.Offset = AccessoryTable.Offset
+			ApplyHeadBoostAccessoryScale(AccessoryTable, NewAccessory, NewMesh)
+
+			if AccessoryTable.ColorMode == "Overlay" then
+				local OTransparency = AccessoryTable.OTransparency
+				local OColor = AccessoryTable.OColor or AccessoryTable.Color
+				CreateOverlay(AccessoryTable.Object, OTransparency, OColor)
+				NewMesh.VertexColor = AccessoryTable["Color"]
+			else
+				NewMesh.VertexColor = AccessoryTable["Color"]
+			end
+
+
+			ApplyParticleData(AccessoryTable, NewAccessory.Handle)
+
+
+			--SlotData.Accessories[i].OriginalC0 = NewAccessory.Handle.CFrame:ToObjectSpace(NewWeld.Part1.CFrame)
+			--SlotData.Accessories[i].OriginalC1 = CFrame.new(0,0,0)
+
+			NewWeld.C0 = AccessoryTable.AccessoryWeld.C0
+			NewWeld.C1 = CFrame.new(0,0,0)
+
+			if not AccessoryTable["DistanceFromOrigin"] then
+				AccessoryTable["DistanceFromOrigin"] = AccessoryTable["AccessoryWeld"]["C0"].Position - AccessoryTable["OriginalC0"].Position
+			end
+
+
+			if not AccessoryTable.RotationsApplied then
+				local X, Y, Z = AccessoryTable["AccessoryWeld"]["C0"]:ToEulerAnglesXYZ()
+				local X1, Y1, Z1 = AccessoryTable["OriginalC0"]:ToEulerAnglesXYZ()
+				AccessoryTable["RotationsApplied"] = Vector3.new(X-X1, Y-Y1, Z-Z1)
+			end
+
+			if IsIncorrectIndex == true then
+				table.insert(NewAccessoryTable, AccessoryTable)
+			end
+
+
+		elseif AccessoryTable.IsItemPack then -- its an item pack
+			print("Item pack item detected", AccessoryTable.Name)
+			local GamepassItemTool, GamepassItemCharacter = script.Parent.SpawnGamepassItem:Invoke(Player, AccessoryTable.WeaponName, AccessoryTable.AccessoryWeld.C0, AccessoryTable.Name)
+			AccessoryTable.Object = GamepassItemCharacter
+			AccessoryTable.Object.Handle:FindFirstChild("AccessoryWeld").Part1 = Player.Character:FindFirstChild(AccessoryTable.WeldPart)
+			wait()
+			if IsIncorrectIndex == true then
+				table.insert(NewAccessoryTable, AccessoryTable)
+			end
+
+		elseif AccessoryTable.IsMeshPart then -- its layered clothing
+			warn("Meshpart loading found!", AccessoryTable.AccessoryId)
+			local AccessoryId = AccessoryTable.AccessoryId
+			local InsertedAccessory = InsertService:LoadAsset(AccessoryId)
+			InsertedAccessory.Parent = workspace
+			InsertedAccessory = InsertedAccessory:FindFirstChildOfClass("Accessory")
+			InsertedAccessory.Handle.Transparency = AccessoryTable.Transparency
+
+			local newVal = Instance.new("IntValue")
+			newVal.Value = AccessoryId
+			newVal.Name = "AccessoryId"
+			newVal.Parent = InsertedAccessory
+
+			InsertedAccessory.Parent = workspace
+			Humanoid:AddAccessory(InsertedAccessory)
+
+			AccessoryTable.Object = InsertedAccessory
+
+			if AccessoryTable.ColorMode == "Overlay" then
+				local OTransparency = AccessoryTable.OTransparency
+				local OColor = AccessoryTable.Color or AccessoryTable.OColor
+				CreateOverlay(AccessoryTable.Object, OTransparency, OColor)
+			end
+
+			ApplyParticleData(AccessoryTable, InsertedAccessory.Handle)
+
+		end
+	end
+
+	if IsIncorrectIndex == true then
+		print("Incorrect index")
+		SlotData["Accessories"] = NewAccessoryTable
+	end
+	HideCollisionParts(Character)
+
+	local collisionConn
+	collisionConn = Character.DescendantAdded:Connect(function(obj)
+		if obj.Name == "CollisionPart" and obj:IsA("BasePart") then
+			obj.Transparency = 1
+			obj.CastShadow = false
+		end
+	end)
+
+	task.delay(2, function()
+		if collisionConn then
+			collisionConn:Disconnect()
+			collisionConn = nil
+		end
+	end)
+
+	return SlotData
 end
+
 local function LimbRemover(Client, LimbToRemove, Transparency)
-	return LimbService.ApplyStoredLimbTransparency(Client, LimbToRemove, Transparency)
+	local x = Client.Character:FindFirstChild(LimbToRemove)
+	if x then
+		if Transparency == true then
+			x.Transparency = 1
+		else
+			x.Transparency = 0
+		end
+		local v = x:FindFirstChild("IntendedTransparency")
+		if v then
+			if Transparency == true then
+				v.Value = 1
+			else
+				v.Value = 0
+			end
+		else
+			v = Instance.new("NumberValue")
+			v.Name = "IntendedTransparency"
+			if Transparency == true then
+				v.Value = 1
+			else
+				v.Value = 0
+			end
+		end
+	end
+
+	return true
 end
 
 function deepCopy(original)
-	return CustomizationUtil.DeepCopy(original)
+	local copy = {}
+	for k, v in pairs(original) do
+		if type(v) == "table" then
+			v = deepCopy(v)
+		end
+		copy[k] = v
+	end
+	return copy
 end
 
 local function LoadLegacyCharacterSlot(Client, Slot, value)
-	return CharacterLegacyLoadService.LoadLegacyCharacterSlot(Client, Slot, value, {
-		DeepCopy = deepCopy,
-		DefaultAccessory = DefaultAccessory,
-		LimbRemover = LimbRemover,
-	})
+	print("Loading legacy slot", Slot, "for", Client)
+
+	-- TestStore1 is the one currently used.
+
+	if value ~= nil then
+		print("Entry does exist.")
+		local Value = deepCopy(value)
+		local Character = Client.Character
+		print("Slot name:", Value.SlotName)
+		local x = Character.Humanoid.HumanoidDescription:Clone()
+		x.Shirt = string.match(tostring(Value["ShirtTemplate"]), "%d+")
+		x.Pants = string.match(tostring(Value["PantsTemplate"]), "%d+")
+		x.WidthScale = Value["Scale"]["Width"]
+		x.HeightScale = Value["Scale"]["Height"]
+		x.DepthScale = Value["Scale"]["Depth"]
+		x.HeadScale = Value["Scale"]["Head"]
+		if Value["Animations"] then
+			print("ANIMATIONS: Is a new slot")
+			x.WalkAnimation = Value["Animations"]["WalkAnimation"]
+			x.RunAnimation = Value["Animations"]["RunAnimation"]
+			x.JumpAnimation = Value["Animations"]["JumpAnimation"]
+			x.FallAnimation = Value["Animations"]["FallAnimation"]
+			x.SwimAnimation = Value["Animations"]["SwimAnimation"]
+			x.ClimbAnimation = Value["Animations"]["ClimbAnimation"]
+			x.IdleAnimation = Value["Animations"]["IdleAnimation"]
+		else
+			print("ANIMATIONS: Is an old slot")
+			Value["Animations"] = {
+				["WalkAnimation"] = x.WalkAnimation,
+				["RunAnimation"] = x.RunAnimation,
+				["JumpAnimation"] = x.JumpAnimation,
+				["FallAnimation"] = x.FallAnimation,
+				["SwimAnimation"] = x.SwimAnimation,
+				["ClimbAnimation"] = x.ClimbAnimation,
+				["IdleAnimation"] = x.IdleAnimation,
+			}
+		end
+
+
+
+
+		--x.TorsoColor = Client.Character["Body Colors"].Torso
+		--ApplyStoredAccessories(Client)
+
+
+
+
+		--x.Face = string.match(tostring(Value["FaceID"]), "%d+")
+		Client.Character.Humanoid:ApplyDescription(x)
+		repeat wait() until Client.Character:FindFirstChild("HumanoidRootPart")
+
+
+		--Client.Character.Pants.PantsTemplate = Value["PantsTemplate"]
+		Client.Character.Head.face.Texture = Value["FaceID"]
+
+		for x, v in pairs(Value["BodyColors"]) do
+			print(x, " LOL", v.R, v.G, v.B)
+			Character["Body Colors"][x .. "Color3"] = Color3.fromRGB(v.R*255, v.G*255, v.B*255)
+		end
+
+		local CharacterTable = {
+			["ParticleEmitters"] = {},
+			["Rigs"] = {},
+			["Accessories"] = {},
+			["Animations"] = {
+				["WalkAnimation"] = Character.Humanoid.HumanoidDescription.WalkAnimation,
+				["RunAnimation"] = Character.Humanoid.HumanoidDescription.RunAnimation,
+				["IdleAnimation"] = Character.Humanoid.HumanoidDescription.IdleAnimation,
+			},
+			["CharacterInformation"] = {
+				["CharacterName"] = "",
+				["CharacterBio"] = "",
+				["EmpowermentType"] = "",
+				["IsCustomEmpowerment"] = false,
+				["Empowerment"] = "",
+				["EmpowermentTitle"] = "",
+				["Skills"] = {
+					{}, {}, {}, {}, {}
+				}
+			},
+			["ShirtTemplate"] = Client.Character.Shirt.ShirtTemplate,
+			["PantsTemplate"] = Client.Character.Pants.PantsTemplate,
+			["FaceID"] = string.gsub(Character.Head.face.Texture, "%D", ""),
+			["LimbRemover"] = {},
+			["Scale"] = {
+				["Height"] = Character.Humanoid.BodyHeightScale.Value,
+				["Depth"] = Character.Humanoid.BodyDepthScale.Value,
+				["Width"] = Character.Humanoid.BodyWidthScale.Value,
+				["Head"] = Character.Humanoid.HeadScale.Value
+			},
+			["BodyColors"] = {
+				["Head"] = {
+					["R"] = Character["Body Colors"]["HeadColor3"].R,
+					["G"] = Character["Body Colors"]["HeadColor3"].G,
+					["B"] = Character["Body Colors"]["HeadColor3"].B
+				},
+				["RightArm"] = {
+					["R"] = Character["Body Colors"]["RightArmColor3"].R,
+					["G"] = Character["Body Colors"]["RightArmColor3"].G,
+					["B"] = Character["Body Colors"]["RightArmColor3"].B
+				},
+				["LeftArm"] = {
+					["R"] = Character["Body Colors"]["LeftArmColor3"].R,
+					["G"] = Character["Body Colors"]["LeftArmColor3"].G,
+					["B"] = Character["Body Colors"]["LeftArmColor3"].B
+				},
+				["LeftLeg"] = {
+					["R"] = Character["Body Colors"]["LeftLegColor3"].R,
+					["G"] = Character["Body Colors"]["LeftLegColor3"].G,
+					["B"] = Character["Body Colors"]["LeftLegColor3"].B
+				},
+				["RightLeg"] = {
+					["R"] = Character["Body Colors"]["RightLegColor3"].R,
+					["G"] = Character["Body Colors"]["RightLegColor3"].G,
+					["B"] = Character["Body Colors"]["RightLegColor3"].B
+				},
+				["Torso"] = {
+					["R"] = Character["Body Colors"]["TorsoColor3"].R,
+					["G"] = Character["Body Colors"]["TorsoColor3"].G,
+					["B"] = Character["Body Colors"]["TorsoColor3"].B
+				},
+			},
+		}	
+
+		local laface = Character.Head.face.Texture
+		if laface:sub(1,25) == "rbxthumb://type=Asset&id=" then
+			print("CUSTOM FACE")
+			local str = laface:sub(26, #laface-12)
+			print("THE NUMBERS MASON", str)
+			CharacterTable["FaceID"] = str
+		end
+
+		for i, x in pairs(Character:GetChildren()) do
+			if x:IsA("Accessory") then x:Destroy() end
+		end
+
+		local NewAccessoryTable = {}
+		for i, v in pairs(Value["Accessories"]) do
+
+			local newAccessory = DefaultAccessory:Clone()
+			newAccessory.Name = i
+			newAccessory.AttachmentForward = Vector3.new(v.AttachmentForwardX, v.AttachmentForwardY, v.AttachmentForwardZ)
+			newAccessory.AttachmentPos = Vector3.new(v.AttachmentPosX, v.AttachmentPosY, v.AttachmentPosZ)
+			newAccessory.AttachmentRight = Vector3.new(v.AttachmentRightX, v.AttachmentRightY, v.AttachmentRightZ)
+			newAccessory.AttachmentUp = Vector3.new(v.AttachmentUpX, v.AttachmentUpY, v.AttachmentUpZ)
+			newAccessory.Handle.Size = Vector3.new(v.HandleSizeX, v.HandleSizeY, v.HandleSizeZ)
+			newAccessory.Handle.Color = Color3.new(v.VertexColorRed, v.VertexColorGreen, v.VertexColorBlue)
+			newAccessory.Handle.OriginalSize.Value = Vector3.new(v.HandleSizeX, v.HandleSizeY, v.HandleSizeZ)
+
+			local NewAttachment = newAccessory.Handle:FindFirstChildOfClass("Attachment")
+
+			NewAttachment.Orientation = Vector3.new(v.AttachmentOrientationX, v.AttachmentOrientationY, v.AttachmentOrientationZ)
+			NewAttachment.Position = Vector3.new(v.AttachmentPositionX, v.AttachmentPositionY, v.AttachmentPositionZ)
+			NewAttachment.SecondaryAxis = Vector3.new(v.AttachmentSecondaryAxisX, v.AttachmentSecondaryAxisY, v.AttachmentSecondaryAxisZ)
+			NewAttachment.Name = v.AttachmentName
+
+			local NewMesh = newAccessory.Handle:FindFirstChildOfClass("SpecialMesh")
+
+			NewMesh.MeshId = v.MeshId
+			NewMesh.TextureId = v.TextureId
+			NewMesh.VertexColor = Vector3.new(v.VertexColorRed, v.VertexColorGreen, v.VertexColorBlue)
+
+			NewMesh.Scale = Vector3.new(v.MeshScaleX, v.MeshScaleY, v.MeshScaleZ)
+
+			newAccessory.Handle.OriginalSize.Value = Vector3.new(v.OriginalSizeX, v.OriginalSizeY, v.OriginalSizeZ)
+
+			newAccessory.Parent = workspace
+			Client.Character.Humanoid:AddAccessory(newAccessory)
+
+			local function ConvertToAccessoryTable(child)
+				wait()
+				local handle = child.Handle
+				local mesh = handle:FindFirstChildOfClass("SpecialMesh")
+				local attachment = handle:FindFirstChildOfClass("Attachment")
+				local weld = handle:FindFirstChildOfClass("Weld")
+
+				local SavedTableToApply = {
+					["Object"] = child,
+					["Name"] = child.Name,
+					["MeshId"] = mesh.MeshId,
+					["HandleSize"] = handle.Size,
+					["TextureId"] = mesh.TextureId,
+					["Color"] = mesh.VertexColor,
+					["Transparency"] = handle.Transparency,
+					["Material"] = handle.Material,
+					["Scale"] = mesh.Scale,
+					["Offset"] = mesh.Offset,
+					["OriginalSize"] = handle:WaitForChild("OriginalSize").Value,
+					["AccessoryWeld"] = {["C0"] = handle.CFrame:ToObjectSpace(weld.Part1.CFrame), ["C1"] = CFrame.new(0,0,0)},
+					["DistanceFromOrigin"] = Vector3.new(0,0,0),
+					["RotationsApplied"] = Vector3.new(0,0,0),
+					["DistanceFromOriginC1"] = Vector3.new(0,0,0),
+					["WeldPart"] = weld.Part1.Name,
+					["OriginalC0"] = handle.CFrame:ToObjectSpace(weld.Part1.CFrame),
+					["OriginalC1"] = CFrame.new(0,0,0),
+					["RevertScale"] = NewMesh.Scale,
+					["RootScale"] =  NewMesh.Scale,
+					["OriginalMeshId"] = mesh.MeshId,
+					["Particle"] = "None",
+					["ParticleColor"] = Color3.fromRGB(255,255,255),
+					["ParticleSize"] = 0,
+					["ParticleTransparency"] = 0,
+					["ParticleRate"] = 0,
+					["OriginalTextureId"] = v.OriginalTextureId,
+					["OriginalColor"] = Vector3.new(1,1,1),
+					["OriginalTransparency"] = handle.Transparency,
+					["OriginalMaterial"] = handle.Material,
+					["OriginalWeldPart"] = weld.Part1.Name,
+					["AttachmentForward"] = child.AttachmentForward,
+					["AttachmentPos"] = child.AttachmentPos,
+					["AttachmentRight"] = child.AttachmentRight,
+					["AttachmentUp"] = child.AttachmentUp,
+					["Attachment"] = {["Name"] = attachment.Name, ["Axis"] = attachment.Axis, ["SecondaryAxis"] = attachment.SecondaryAxis, ["Orientation"] = attachment.Orientation, ["Position"] = attachment.Position}
+				}
+
+				local HeadScale = CharacterTable.Scale.Head
+				local Width = CharacterTable.Scale.Width
+				local Depth = CharacterTable.Scale.Depth
+				local Height = CharacterTable.Scale.Height
+
+				if handle:FindFirstChild("HairAttachment") or handle:FindFirstChild("FaceFrontAttachment") or handle:FindFirstChild("HatAttachment") then
+					SavedTableToApply.RootScale = Vector3.new(SavedTableToApply.RevertScale.X/HeadScale, SavedTableToApply.RevertScale.Y/HeadScale, SavedTableToApply.RevertScale.Z/HeadScale)
+				else
+					SavedTableToApply.RootScale = Vector3.new(SavedTableToApply.RevertScale.X/Width, SavedTableToApply.RevertScale.Y/Height, SavedTableToApply.RevertScale.Z/Depth)
+				end
+
+				local X,Y,Z = SavedTableToApply.OriginalC0:ToEulerAnglesXYZ()
+
+				SavedTableToApply.RootRotation = Vector3.new(X,Y,Z)
+
+				return SavedTableToApply
+			end
+
+			local SavedTableToApply = ConvertToAccessoryTable(newAccessory)
+
+			local weld = newAccessory.Handle:FindFirstChildOfClass("Weld")
+			print("REVERT SCALE:", SavedTableToApply.RevertScale)
+			weld.C0 = (CFrame.new(v.OriginalC0X, v.OriginalC0Y, v.OriginalC0Z, v.OriginalC0R00, v.OriginalC0R01, v.OriginalC0R02, v.OriginalC0R10, v.OriginalC0R11, v.OriginalC0R12, v.OriginalC0R20, v.OriginalC0R21, v.OriginalC0R22) * CFrame.Angles(math.rad(v.RotationX), math.rad(v.RotationY), math.rad(v.RotationZ))) + (Vector3.new(v.PositionX, v.PositionY, v.PositionZ)/10)
+
+			local val
+			if newAccessory.Handle:FindFirstChild("HairAttachment") or newAccessory.Handle:FindFirstChild("FaceFrontAttachment") or newAccessory.Handle:FindFirstChild("HatAttachment") then
+				val = (Vector3.new(v.SizeX, v.SizeY, v.SizeZ)/10)*Client.Character.Humanoid.HeadScale.Value
+			else
+				val = (Vector3.new((v.SizeX/10)*Client.Character.Humanoid.BodyWidthScale.Value, (v.SizeY/10)*Client.Character.Humanoid.BodyHeightScale.Value, (v.SizeZ/10)*Client.Character.Humanoid.BodyDepthScale.Value))
+			end
+			newAccessory.Handle:FindFirstChildOfClass("SpecialMesh").Scale = Vector3.new(v.MeshScaleX, v.MeshScaleY, v.MeshScaleZ) + val
+			SavedTableToApply["Scale"] = newAccessory.Handle:FindFirstChildOfClass("SpecialMesh").Scale
+			weld.C1 = CFrame.new(v.OriginalC1X, v.OriginalC1Y, v.OriginalC1Z, v.OriginalC1R00, v.OriginalC1R01, v.OriginalC1R02, v.OriginalC1R10, v.OriginalC1R11, v.OriginalC1R12, v.OriginalC1R20, v.OriginalC1R21, v.OriginalC1R22)
+
+			if v.WeldPart1 then
+				print("Has")
+				weld.Part1 = Client.Character:FindFirstChild(v.WeldPart1)
+
+			else
+				print("does not have weldpart property")
+				v.WeldPart1 = weld.Part1.Name
+				v.OriginalWeldPart1 = weld.Part1.Name
+
+			end
+
+
+			SavedTableToApply["WeldPart"] = v.WeldPart1
+			SavedTableToApply["AccessoryWeld"]["C0"] = newAccessory.Handle.CFrame:ToObjectSpace(weld.Part1.CFrame)
+
+			-- CONVERTING TABLE TO NEW SYSTEM
+
+			table.insert(NewAccessoryTable, SavedTableToApply)
+		end
+
+		CharacterTable["Accessories"] = NewAccessoryTable
+
+		if Value["LimbRemover"] ~= nil then
+			print("Has Limb remover")
+			for i, v in pairs(Client.Character:GetChildren()) do
+				if v:IsA("BasePart") or v:IsA("UnionOperation") then
+					if v.Name ~= "HumanoidRootPart" then
+						if Value["LimbRemover"][v.Name] ~= nil then
+							LimbRemover(Client, v.Name, Value["LimbRemover"][v.Name])
+							CharacterTable["LimbRemover"][v.Name] = true
+						else
+							v.Transparency = 0
+						end
+					end
+				end
+			end
+		else
+			for i, v in pairs(Client.Character:GetChildren()) do
+				if v:IsA("BasePart") or v:IsA("UnionOperation") then
+					if v.Name ~= "HumanoidRootPart" then
+
+						v.Transparency = 0
+
+					end
+				end
+			end
+		end		
+
+		return CharacterTable
+	else
+		print("Entry does not exist.")
+		return false
+	end
 end
+
+
 function round(n)
-	return CustomizationUtil.Round(n)
+	return math.round(n * 100) / 100
 end
 
 local function ValidateAccessoryOwner(Player, Accessory)
-	return ValidationService.ValidateAccessoryOwner(Player, Accessory)
+	if Accessory:FindFirstAncestorOfClass("Model") ~= Player.Character then
+		Player:Kick("Invalid request")
+		return false
+	end
+	return true
 end
 
-local OppositeBodyParts = AccessoryTransform.OppositeBodyParts
+local OppositeBodyParts = {
+	LeftUpperArm = "RightUpperArm",
+	RightUpperArm = "LeftUpperArm",
+	LeftLowerArm = "RightLowerArm",
+	RightLowerArm = "LeftLowerArm",
+	LeftHand = "RightHand",
+	RightHand = "LeftHand",
+	LeftUpperLeg = "RightUpperLeg",
+	RightUpperLeg = "LeftUpperLeg",
+	LeftLowerLeg = "RightLowerLeg",
+	RightLowerLeg = "LeftLowerLeg",
+	LeftFoot = "RightFoot",
+	RightFoot = "LeftFoot",
+	LeftArm = "RightArm",
+	RightArm = "LeftArm",
+	LeftLeg = "RightLeg",
+	RightLeg = "LeftLeg",
+}
+
+local function MirrorVectorAcrossCharacter(vector)
+	return Vector3.new(-vector.X, vector.Y, vector.Z)
+end
 
 local function MirrorCFrameAcrossCharacter(cframe)
-	return AccessoryTransform.MirrorCFrameAcrossCharacter(cframe)
+	local position = MirrorVectorAcrossCharacter(cframe.Position)
+	local right = cframe.RightVector
+	local up = cframe.UpVector
+	local back = -cframe.LookVector
+
+	return CFrame.fromMatrix(
+		position,
+		Vector3.new(right.X, -right.Y, -right.Z),
+		MirrorVectorAcrossCharacter(up),
+		MirrorVectorAcrossCharacter(back)
+	)
 end
 
 local function RecalculateAccessoryTransformData(accessoryTable, character)
-	return AccessoryTransform.RecalculateAccessoryTransformData(accessoryTable, character)
+	if accessoryTable.IsMeshPart then return end
+	local accessory = accessoryTable.Object
+	local handle = accessory and accessory:FindFirstChild("Handle")
+	if not handle then return end
+
+	local weld = handle:FindFirstChild("AccessoryWeld") or handle:FindFirstChildOfClass("Weld")
+	if not weld or not weld.Part1 then return end
+
+	local originCF = accessoryTable.OriginalC0:Inverse()
+	local currentCF = handle.CFrame
+	local referenceCF = weld.Part1.CFrame * CFrame.new(originCF.Position)
+	local accCF = referenceCF:ToObjectSpace(CFrame.new() + currentCF.Position)
+	accessoryTable.DistanceFromOrigin = Vector3.new(-accCF.Position.X, -accCF.Position.Y, -accCF.Position.Z)
+
+	local originalRx, originalRy, originalRz = accessoryTable.RootRotation.X, accessoryTable.RootRotation.Y, accessoryTable.RootRotation.Z
+	local currentCFInverse = accessoryTable.AccessoryWeld.C0:Inverse()
+	local currentRx, currentRy, currentRz = currentCFInverse:ToEulerAnglesXYZ()
+	accessoryTable.RotationsApplied = Vector3.new(currentRx - originalRx, currentRy - originalRy, currentRz - originalRz)
 end
 
 local function GetMaxAccessoriesForPlayer(player)
-	return ValidationService.GetMaxAccessoriesForPlayer(player, Constants, MarketplaceService, RunService, GroupVerif, vipwhitelist)
+	local maxAccessories = Constants.MaxAccessories
+	local ownsMoreAccessories = false
+	pcall(function()
+		ownsMoreAccessories = MarketplaceService:UserOwnsGamePassAsync(player.UserId, 179828905)
+	end)
+	if ownsMoreAccessories then
+		maxAccessories = Constants.MoreAccessoriesGamepassMaxAccessories
+	end
+	if vipwhitelist[player.UserId] or GroupVerif.CheckRank(player, "Gamemaster") or RunService:IsStudio() then
+		maxAccessories = Constants.SpecialMaxAccessories
+	end
+	return maxAccessories
 end
 
 local function GetFilteredBroadcastText(textObject)
-	return ValidationService.GetFilteredBroadcastText(textObject)
+	local filteredMessage
+	local success, errorMessage = pcall(function()
+		filteredMessage = textObject:GetNonChatStringForBroadcastAsync()
+	end)
+
+	if success then
+		return filteredMessage
+	elseif errorMessage then
+		print("Error filtering message:", errorMessage)
+	end
+	return false
 end
 
 local Customization = {
 
 	FixAccessories_test = function(self,Player,CharacterTable)
-		return AccessoryFixService.FixAccessoriesTest(Player, CharacterTable, CachedAccessoriesUniversal)
+		Player.Character.Humanoid.HeadScale.Value = CharacterTable["Scale"]["Head"]
+		Player.Character.Humanoid.BodyHeightScale.Value = CharacterTable["Scale"]["Height"]
+		Player.Character.Humanoid.BodyWidthScale.Value = CharacterTable["Scale"]["Width"]
+		Player.Character.Humanoid.BodyDepthScale.Value = CharacterTable["Scale"]["Depth"]
+
+		local CachedAccessoriesTable = CachedAccessoriesUniversal[Player.UserId]
+		if CachedAccessoriesTable then
+			for i, AccessoryTable in ipairs(CharacterTable.Accessories) do
+				local Accessory = AccessoryTable.Object
+				local Weld = Accessory.Handle:FindFirstChildOfClass("Weld")
+				local NewC0Relative = Accessory.Handle.CFrame:ToObjectSpace(Weld.Part1.CFrame)
+
+				AccessoryTable["OriginalC0"] = NewC0Relative
+
+				AccessoryTable["OriginalC1"] = CFrame.new(0,0,0)
+
+				Weld.Part1 = Player.Character:FindFirstChild(AccessoryTable.WeldPart)
+
+				Weld.C0 = CachedAccessoriesTable[i].AccessoryWeld.C0
+				Weld.C1 = CachedAccessoriesTable[i].AccessoryWeld.C1
+
+				local Mesh = Accessory.Handle:FindFirstChildOfClass("SpecialMesh")
+				local newScale = Mesh.Scale
+				AccessoryTable.Scale = Mesh.Scale
+
+				local val
+
+				if Weld.Part0.Name == "Head" then
+					print("ITS A HAIR, FACE, OR HAT ATTACHMENT")
+
+					-- Use saved head scale, not the externally boosted visual head scale.
+					local unboostedHeadScale = CharacterTable["Scale"]["Head"] or 1
+
+					val = Vector3.new(
+						unboostedHeadScale,
+						unboostedHeadScale,
+						unboostedHeadScale
+					)
+				else
+					print("ITS A SHOULDER, NECK, OR BACK ATTACHMENT")
+					val = Vector3.new(Player.Character.Humanoid.BodyWidthScale.Value, Player.Character.Humanoid.BodyHeightScale.Value, Player.Character.Humanoid.BodyDepthScale.Value)
+				end
+				AccessoryTable.RevertScale = Vector3.new(val.X * AccessoryTable.RootScale.X, val.Y * AccessoryTable.RootScale.Y, val.Z * AccessoryTable.RootScale.Z)
+			end
+		end
+
+		table.remove(CachedAccessoriesUniversal, Player.UserId)
+		return CharacterTable
 	end,
 
 	FixAccessories = function(self, Player, CharacterTable, DescriptionToApply)
-		return AccessoryFixService.FixAccessories(Player, CharacterTable, DescriptionToApply, ValidateAccessoryOwner)
+
+
+		Player.Character.Humanoid.HeadScale.Value = CharacterTable["Scale"]["Head"]
+		Player.Character.Humanoid.BodyHeightScale.Value = CharacterTable["Scale"]["Height"]
+		Player.Character.Humanoid.BodyWidthScale.Value = CharacterTable["Scale"]["Width"]
+		Player.Character.Humanoid.BodyDepthScale.Value = CharacterTable["Scale"]["Depth"]
+
+		for index, AccessoryTable in pairs(CharacterTable["Accessories"]) do
+			if not AccessoryTable.IsMeshPart then
+				local Accessory = AccessoryTable.Object
+				if Accessory then
+					local Accessory : Accessory = AccessoryTable.Object
+					if not ValidateAccessoryOwner(Player, Accessory) then return end
+					local Attachment = Accessory.Handle:FindFirstChildOfClass("Attachment")
+					if Attachment then
+						local val
+
+						-- itll fix scaling i think
+
+						local Weld = Accessory.Handle:FindFirstChildOfClass("Weld")
+
+						if Weld.Part0.Name == "Head" then
+							print("ITS A HAIR, FACE, OR HAT ATTACHMENT")
+							val = Vector3.new(Player.Character.Humanoid.HeadScale.Value, Player.Character.Humanoid.HeadScale.Value, Player.Character.Humanoid.HeadScale.Value)
+						else
+							print("ITS A SHOULDER, NECK, OR BACK ATTACHMENT")
+							val = Vector3.new(Player.Character.Humanoid.BodyWidthScale.Value, Player.Character.Humanoid.BodyHeightScale.Value, Player.Character.Humanoid.BodyDepthScale.Value)
+						end
+
+
+						local Mesh = Accessory.Handle:FindFirstChildOfClass("SpecialMesh")
+						local originalweldpart = Weld.Part1
+
+						Weld.Part1 = Player.Character:FindFirstChild(AccessoryTable.WeldPart)
+
+						local OriginalSavedC0 = AccessoryTable["OriginalC0"]
+						local OriginalSavedC1 = AccessoryTable["OriginalC1"]
+
+
+						AccessoryTable.RevertScale = Vector3.new(val.X * AccessoryTable.RootScale.X, val.Y * AccessoryTable.RootScale.Y, val.Z * AccessoryTable.RootScale.Z)
+
+						local lastScale = AccessoryTable.Scale
+						local newScale = Mesh.Scale
+						AccessoryTable.Scale = Mesh.Scale
+
+
+
+						local NewC0Relative = Accessory.Handle.CFrame:ToObjectSpace(Weld.Part1.CFrame)
+						local LastOriginal = AccessoryTable["OriginalC0"]
+						local LastC0 = AccessoryTable.AccessoryWeld.C0
+
+						--NewC0Relative = NewC0Relative - NewC0Relative.Rotation
+
+						local DistanceFromOrigin = AccessoryTable["DistanceFromOrigin"]
+						--local newOriX, newOriY, newOriZ = NewC0Relative:ToEulerAnglesXYZ()
+
+						AccessoryTable["RevertC0"] = NewC0Relative
+
+						--AccessoryTable["OriginalC1"] = CFrame.new(0,0,0)
+
+
+						local original = AccessoryTable.OriginalC0:Inverse()
+
+
+						local distanceFromOrigin = AccessoryTable.DistanceFromOrigin
+						local RotationsApplied = AccessoryTable.RotationsApplied
+
+						local weldPCF = Weld.Part1.CFrame
+
+						if not distanceFromOrigin then
+							warn("MAKING DISTANCE FROM ORIGIN")
+							AccessoryTable.DistanceFromOrigin = AccessoryTable.AccessoryWeld.C0:ToObjectSpace(original).Position
+							distanceFromOrigin = AccessoryTable.DistanceFromOrigin
+						end
+
+						if not RotationsApplied then
+							warn("MAKING ROTAITON FROM ORIGIN")
+							local X, Y, Z =  AccessoryTable["AccessoryWeld"]["C0"]:ToObjectSpace(AccessoryTable.OriginalC0):ToEulerAnglesXYZ()
+							AccessoryTable.RotationsApplied = Vector3.new(X,Y,Z)
+							RotationsApplied = AccessoryTable.RotationsApplied
+						end
+
+						local distanceFromOrigin = AccessoryTable.DistanceFromOrigin
+						local RotationsApplied = AccessoryTable.RotationsApplied
+						local original = AccessoryTable.OriginalC0:Inverse()
+						local weldPCF = Weld.Part1.CFrame
+						local rx, ry, rz = RotationsApplied.X, RotationsApplied.Y, RotationsApplied.Z
+						local originalrx, originalry, originalrz = AccessoryTable.RootRotation.X, AccessoryTable.RootRotation.Y, AccessoryTable.RootRotation.Z
+						local PositionCF = (weldPCF * CFrame.new(original.X - distanceFromOrigin.X, original.Y - distanceFromOrigin.Y, original.Z - distanceFromOrigin.Z)).Position
+						local RotationCF = weldPCF.Rotation * CFrame.fromEulerAnglesXYZ(originalrx+rx, originalry+ry, originalrz+rz)
+						AccessoryTable.AccessoryWeld.C0 = (RotationCF + PositionCF):ToObjectSpace(weldPCF)
+						AccessoryTable.AccessoryWeld.C1 = CFrame.new(0,0,0)
+						AccessoryTable.DistanceFromOrigin = Vector3.new(distanceFromOrigin.X, distanceFromOrigin.Y, distanceFromOrigin.Z)
+						Weld.C0 = AccessoryTable.AccessoryWeld.C0
+						Weld.C1 = AccessoryTable.AccessoryWeld.C1 
+
+					end
+
+
+
+				end
+			end
+		end
+		return CharacterTable
 	end,
+
 	NameBio = function(self, Player, NameBioTable)
 		if self[Player.Name] then
-			return CharacterInfoService.SetNameBio(Player, NameBioTable, ReplicatedStorage.Info, TextService, GetFilteredBroadcastText)
+			--Player = self[Player.Name]
+			local Folder = ReplicatedStorage.Info[Player.Name]
+
+			NameBioTable.Name = GetFilteredBroadcastText(TextService:FilterStringAsync(NameBioTable.Name, Player.UserId))
+			NameBioTable.Bio = GetFilteredBroadcastText(TextService:FilterStringAsync(NameBioTable.Bio, Player.UserId))
+			if NameBioTable.Name == false or NameBioTable.Bio == false then return false end
+
+			Folder.CName.Value = NameBioTable.Name
+			Folder.CBio.Value = NameBioTable.Bio
+			Folder.CImage.Value = NameBioTable.Image
+			wait()
+			return NameBioTable
 		end
 	end,
 
 	Empowerment = function(self, Player, EmpowermentTable, filter)
 		if self[Player.Name] then
-			return CharacterInfoService.SetEmpowerment(Player, EmpowermentTable, filter, ReplicatedStorage.Info, TextService, GetFilteredBroadcastText)
+			warn(Player, EmpowermentTable, filter)
+			local Folder = ReplicatedStorage.Info[Player.Name]
+
+			if filter then
+				EmpowermentTable.Description = GetFilteredBroadcastText(TextService:FilterStringAsync(EmpowermentTable.Description, Player.UserId))
+				EmpowermentTable.Title = GetFilteredBroadcastText(TextService:FilterStringAsync(EmpowermentTable.Title, Player.UserId))
+				if EmpowermentTable.Description == false or EmpowermentTable.Title == false then return false end
+			end
+
+			Folder.EmpowermentType.Value = EmpowermentTable.Type
+			Folder.Empowerment.Value = EmpowermentTable.Description
+			Folder.EmpowermentTitle.Value = EmpowermentTable.Title
+			return EmpowermentTable
 		end
 	end,
 
 	Skill = function(self, Player, SkillTable, filter, slot)
-		return CharacterInfoService.SetSkill(Player, SkillTable, filter, slot, ReplicatedStorage.Info, TextService, GetFilteredBroadcastText)
+		local Folder = ReplicatedStorage.Info[Player.Name]
+
+		if filter then
+			SkillTable.Description = GetFilteredBroadcastText(TextService:FilterStringAsync(SkillTable.Description, Player.UserId))
+			SkillTable.Title = GetFilteredBroadcastText(TextService:FilterStringAsync(SkillTable.Title, Player.UserId))
+			if SkillTable.Description == false or SkillTable.Title == false then return false end
+		end
+
+		Folder["Skill" .. tostring(slot) .. "Type"].Value = SkillTable.Type
+		Folder["Skill" .. tostring(slot) .. "Description"].Value = SkillTable.Description
+		Folder["Skill" .. tostring(slot) .. "Title"].Value = SkillTable.Title
+		return SkillTable
 	end,
 
 	Shirt = function(self, Player, newShirtID, AccessoryTable)
@@ -304,10 +2093,40 @@ local Customization = {
 
 	Face2 = function(self, Player, ID)
 		if self[Player.Name] then
-			local result = FaceService.GetFaceTextureFromDecalAsset(ID, InsertService)
+
+			local function isRealFace(Pantsid)
+				local suc, ass = pcall(function()
+					local ass1 = InsertService:LoadAsset(Pantsid)
+					ass1.Parent = workspace
+					if ass1 then
+						if ass1:FindFirstChildOfClass("Decal") then
+							print("ITS A FACE")
+							local b = ass1:FindFirstChildOfClass("Decal").Texture
+							ass1:Destroy()
+							return b
+						else
+							return false
+						end
+					else
+						return false
+					end
+				end)
+
+				if suc then
+					if ass then
+						return ass
+					else
+
+						return false
+					end
+				else
+					return false
+				end
+			end
+			local result = isRealFace(ID)
 
 			if result == false or result == nil then return false end
-			FaceService.SetFaceTexture(Player.Character, result)
+			Player.Character.Head.face.Texture = result
 			return result
 		end
 	end,
@@ -315,124 +2134,436 @@ local Customization = {
 	Face = function(self, Player, ID)
 		if self[Player.Name] then
 
-			local newID = FaceService.GetThumbnailFaceTexture(ID)
+			local newID = "rbxthumb://type=Asset&id=" .. tostring(ID) .. "&w=420&h=420"
 
-			FaceService.SetFaceTexture(Player.Character, newID)
+			Player.Character.Head.face.Texture = newID
 			return ID
 		end
 	end,
 
 	Color = function(self, Player, BodyPart, Color)
+		print(Player, BodyPart, Color)
 		if self[Player.Name] then
-			return BodyColorService.SetBodyColor(Player, BodyPart, Color)
+
+			local bc = Player.Character:FindFirstChild("Body Colors")
+			if BodyPart == "All" then
+				bc["HeadColor3"] = Color
+				bc["TorsoColor3"] = Color
+				bc["LeftLegColor3"] = Color
+				bc["RightLegColor3"] = Color
+				bc["LeftArmColor3"] = Color
+				bc["RightArmColor3"] = Color
+			else
+				bc[BodyPart .. "Color3"] = Color
+			end
+
+			return Color
 		end
 	end,
 
 	AColor = function(self, Player : Player, UpdateTable : table, ColorInput : Color3)
 
 		if self[Player.Name] then
-			return AccessoryEditService.ApplyAccessoryColor(Player, UpdateTable, ColorInput, ValidateAccessoryOwner, ChangeOverlay)
+			local Color = Vector3.new(ColorInput.R, ColorInput.G, ColorInput.B)
+			for i, AccessoryTable in pairs(UpdateTable) do
+				if not AccessoryTable.IsItemPack then
+					print(Player, AccessoryTable.Accessory, Color)
+					local Accessory : Accessory = AccessoryTable.Object
+					if not ValidateAccessoryOwner(Player, Accessory) then return end
+					if AccessoryTable.ColorMode == "VertexColor" then
+						if not AccessoryTable.IsMeshPart then
+							Accessory.Handle:FindFirstChildOfClass("SpecialMesh").VertexColor = Color
+							Accessory.Handle.Color = Color3.new(Color.X, Color.Y, Color.Z)
+						end
+					elseif AccessoryTable.ColorMode == "Overlay" then
+						ChangeOverlay(Accessory, AccessoryTable.OTransparency, ColorInput)
+						if not AccessoryTable.IsMeshPart then
+							--Accessory.Handle:FindFirstChildOfClass("SpecialMesh").VertexColor = Vector3.new(1,1,1)
+							Accessory.Handle.Color = Color3.new(Color.X, Color.Y, Color.Z)
+						end
+						Accessory.Handle.Color = Color3.new(Color.X, Color.Y, Color.Z)
+					end
+				end
+			end
+
+			return Color
 		end
 	end,
 
 	PColor = function(self, Player, SelectedAccessories)
 		if self[Player.Name] then
-			return AccessoryEditService.ApplyParticleColor(Player, SelectedAccessories, ValidateAccessoryOwner, ApplyParticleColor)
+			for i, AccessoryTable in ipairs(SelectedAccessories) do
+				local Accessory : Accessory = AccessoryTable.Object
+				if not ValidateAccessoryOwner(Player, Accessory) then return end
+
+				local Effect = Accessory.Handle:FindFirstChildOfClass("ParticleEmitter")
+				if Effect then
+					ApplyParticleColor(AccessoryTable, Effect)
+				end
+			end
+			return true
 		end
 	end,
 
 	Height = function(self, Player, Value, CharacterTable)
+		print(Player, Value)
 		if self[Player.Name] then
-			return CharacterScaleService.SetHeight(Player, Value, CharacterTable, function(player, tableToFix)
-				return self:FixAccessories(player, tableToFix)
-			end)
+
+			local Character = Player.Character
+			local Humanoid = Character.Humanoid
+			if Humanoid.BodyHeightScale.Value ~= Value then
+				Humanoid.BodyHeightScale.Value = Value
+				CharacterTable.Scale.Height = Value
+				local NewTable = self:FixAccessories(Player, CharacterTable)
+				return NewTable
+			else
+				return CharacterTable
+			end
+
 		end
 	end,
 
 	Body = function(self, Player, Width, Depth, Head, CharacterTable)
+		print(Player, Width, Depth, Head)
 		if self[Player.Name] then
-			return CharacterScaleService.SetBody(Player, Width, Depth, Head, CharacterTable, function(player, tableToFix)
-				return self:FixAccessories(player, tableToFix)
-			end)
+			local Character = Player.Character
+			local Humanoid = Character.Humanoid
+			local Change = false
+			if Humanoid.BodyWidthScale.Value ~= Width or Humanoid.BodyDepthScale.Value ~= Depth or Humanoid.HeadScale.Value ~= Head then
+				Change = true
+				print("Change detected")
+			end
+			if Change then
+				Humanoid.BodyWidthScale.Value = Width
+				Humanoid.BodyDepthScale.Value = Depth
+				Humanoid.HeadScale.Value = Head
+
+				CharacterTable.Scale.Head = Head
+				CharacterTable.Scale.Width = Width
+				CharacterTable.Scale.Depth = Depth
+
+				local NewTable = self:FixAccessories(Player, CharacterTable)
+
+				return NewTable
+
+			else
+				return CharacterTable
+			end
 		end
 	end,
 
 	Proportionalize = function(self, Player, CharacterTable)
-		return CharacterScaleService.Proportionalize(Player, CharacterTable, DefaultProportion, DefaultType, function(player, tableToFix)
-			return self:FixAccessories(player, tableToFix)
-		end)
+		print(Player, "Proportionalize")
+		local Character = Player.Character
+		local Humanoid = Character.Humanoid
+		local heightv = Humanoid.BodyHeightScale.Value
+		local width = Humanoid.BodyWidthScale
+		local depth = Humanoid.BodyDepthScale
+		local head = Humanoid.HeadScale
+
+		if depth.Value == heightv * 0.88 and head.Value == heightv * 0.9 and width.Value == heightv*0.86 then return CharacterTable end
+
+		local btype = 0.8
+		local ptype = 1
+
+		width.Value = heightv * 0.86
+		CharacterTable.Scale.Width = width.Value
+		depth.Value = heightv * 0.88
+		CharacterTable.Scale.Depth = depth.Value
+		head.Value = heightv * 0.90
+		CharacterTable.Scale.Head = head.Value
+		Humanoid.BodyProportionScale.Value = DefaultProportion
+		Humanoid.BodyTypeScale.Value = DefaultType
+
+
+		local NewTable = self:FixAccessories(Player, CharacterTable)
+
+		return NewTable
+
 	end,
 
 	Animations = function(self, Player, IdleID, WalkID, RunID, CharacterTable)
+		print(Player, IdleID, WalkID, RunID)
 		if self[Player.Name] then
-			return CharacterScaleService.SetAnimations(Player, IdleID, WalkID, RunID, CharacterTable, InsertService, DefaultProportion, DefaultType, function(player, tableToFix)
-				return self:FixAccessories(player, tableToFix)
+
+			local function isRealAnimation(shirtid)
+				local suc, ass = pcall(function()
+					local ass1 = InsertService:LoadAsset(shirtid)
+					ass1.Parent = workspace
+					if ass1 then
+						if ass1:FindFirstChildOfClass("Animation") then
+							return true
+						else
+							return false
+						end
+					else
+						return false
+					end
+				end)
+			end
+
+			local success, returned = pcall(function()
+
+				local realIdle, realWalk, realRun = isRealAnimation(IdleID), isRealAnimation(WalkID), isRealAnimation(RunID)
+
+				if realIdle == false or realWalk == false or realRun == false then error("One of the assets are not a real Asset ID.") end
+				local Character = Player.Character
+
+				local Description = Player.Character.Humanoid:GetAppliedDescription()
+				Description.IdleAnimation = IdleID
+				Description.WalkAnimation = WalkID
+				Description.RunAnimation = RunID
+				Description.HeightScale = CharacterTable.Scale.Height
+				Description.HeadScale = CharacterTable.Scale.Head
+				Description.WidthScale = CharacterTable.Scale.Width
+				Description.DepthScale = CharacterTable.Scale.Depth
+				Description.BodyTypeScale = DefaultType
+				Description.ProportionScale = DefaultProportion
+				Description.HeadColor = Character["Body Colors"].HeadColor3
+				Description.TorsoColor = Character["Body Colors"].TorsoColor3
+				Description.LeftArmColor = Character["Body Colors"].LeftArmColor3
+				Description.RightArmColor = Character["Body Colors"].RightArmColor3
+				Description.LeftLegColor = Character["Body Colors"].LeftLegColor3
+				Description.RightLegColor = Character["Body Colors"].RightLegColor3
+
+				Player.Character.Humanoid:ApplyDescription(Description)
+
+				CharacterTable["Animations"]["RunAnimation"] = RunID
+				CharacterTable["Animations"]["IdleAnimation"] = IdleID
+				CharacterTable["Animations"]["WalkAnimation"] = WalkID
+				CharacterTable = self:FixAccessories(Player, CharacterTable)
 			end)
+
+			if not success then warn(returned) return false end
+
+			return CharacterTable
 		end
 	end,
 	ATransparency = function(self,Player,UpdateTable,Value)
 
 		if self[Player.Name] then
-			return AccessoryEditService.SetTransparency(Player, UpdateTable, Value, ValidateAccessoryOwner)
+			for i, AccessoryTable in pairs(UpdateTable) do
+				local Accessory : Accessory = AccessoryTable.Object
+				if not ValidateAccessoryOwner(Player, Accessory) then return end
+				Accessory.Handle.Transparency = Value
+			end
+			return Value
 		end
 	end,
 	Material = function(self,Player,SelectedAccessories)
 
 
 		if self[Player.Name] then
-			return AccessoryEditService.SetMaterial(Player, SelectedAccessories, ValidateAccessoryOwner)
+			for i, AccessoryTable in ipairs(SelectedAccessories) do
+				--print("MATERIAL", Player, AccessoryTable.Material)
+				local Accessory : Accessory = AccessoryTable.Object
+				if not ValidateAccessoryOwner(Player, Accessory) then return end
+				Accessory.Handle.Material = AccessoryTable.Material
+			end
+
+			return true
 		end
 	end,
 	MeshId = function(self,Player,SelectedAccessories)
 
-		return AccessoryEditService.SetMeshId(Player, SelectedAccessories, ValidateAccessoryOwner)
+		for i, AccessoryTable in pairs(SelectedAccessories) do
+			local Accessory : Accessory = AccessoryTable.Object
+			if not ValidateAccessoryOwner(Player, Accessory) then return end
+			if not AccessoryTable.IsMeshPart and not AccessoryTable.IsItemPack then
+				Accessory.Handle:FindFirstChildOfClass("SpecialMesh").MeshId = AccessoryTable.MeshId
+			end
+		end
+		return true
 	end,
 	Particle = function(self,Player,SelectedAccessories,ParticleType)
 		if self[Player.Name] then
-			return AccessoryEditService.SetParticle(Player, SelectedAccessories, ParticleType, ParticlesFolder, ValidateAccessoryOwner, ApplyParticleColor)
+			for index, AccessoryTable in ipairs(SelectedAccessories) do
+				local Accessory : Accessory = AccessoryTable.Object
+				if not ValidateAccessoryOwner(Player, Accessory) then return end
+
+				local P = Accessory.Handle:FindFirstChildOfClass("ParticleEmitter")
+				if P then P:Destroy() end
+
+				if ParticleType ~= "None" then
+					local Found = ParticlesFolder:FindFirstChild(ParticleType)
+					if Found then
+						Found = Found:Clone()
+						Found.Parent = Accessory.Handle
+						Found.Enabled = true
+						ApplyParticleColor(AccessoryTable, Found)
+					end
+				end
+			end
 		end
 	end,
 
 	ParticleAdjust = function(self,Player,SelectedAccessories)
 		if self[Player.Name] then
-			return AccessoryEditService.AdjustParticle(Player, SelectedAccessories, ValidateAccessoryOwner, ConfigureParticleEmitter)
+			for index, AccessoryTable in ipairs(SelectedAccessories) do
+				local Accessory : Accessory = AccessoryTable.Object
+				if not ValidateAccessoryOwner(Player, Accessory) then return end
+
+				local P = Accessory.Handle:FindFirstChildOfClass("ParticleEmitter")
+				if P then
+					ConfigureParticleEmitter(AccessoryTable, P)
+				end
+			end
+			return true
 		end
 	end,
 
 	Texture = function(self,Player,UpdateTable, Value)
 		if self[Player.Name] then
-			return AccessoryEditService.SetTexture(Player, UpdateTable, Value, ValidateAccessoryOwner)
+			local ToApply = "https://www.roblox.com/Thumbs/Asset.ashx?width=420&height=420&assetId=" .. tostring(Value)
+			for i, AccessoryTable in pairs(UpdateTable) do
+				local Accessory : Accessory = AccessoryTable.Object
+				if not ValidateAccessoryOwner(Player, Accessory) then return end
+				if AccessoryTable.IsMeshPart then
+					Accessory.Handle.TextureID = ToApply
+				elseif not AccessoryTable.IsMeshPart and not AccessoryTable.IsItemPack then
+					Accessory.Handle:FindFirstChildOfClass("SpecialMesh").TextureId = ToApply
+				end
+
+			end
+
+			return ToApply
 		end
 
 	end,
 	Position = function(self,Player,TableOfAccessories)
 		if self[Player.Name] then
-			return AccessoryEditService.SetWeldTransform(Player, TableOfAccessories, ValidateAccessoryOwner)
+			for i, accessorytable in ipairs(TableOfAccessories) do
+				local Accessory : Accessory = accessorytable.Object
+				if not ValidateAccessoryOwner(Player, Accessory) then return end
+				if accessorytable.IsItemPack then
+					local Obj = accessorytable.Object
+					local Handle = Obj.Handle
+					local Weld = Handle:FindFirstChild("AccessoryWeld")
+					Weld.C0 = accessorytable.AccessoryWeld.C0
+					Weld.C1 = accessorytable.AccessoryWeld.C1
+				else
+					local Obj = accessorytable.Object
+					local Handle = Obj.Handle
+					local Weld = Handle:FindFirstChildOfClass("Weld")
+					Weld.C0 = accessorytable.AccessoryWeld.C0
+					Weld.C1 = accessorytable.AccessoryWeld.C1
+				end
+
+			end
+			return true
 		end
 	end,
 	Size = function(self,Player,TableOfAccessories)
 		if self[Player.Name] then
-			return AccessoryEditService.SetSize(Player, TableOfAccessories, ValidateAccessoryOwner)
+			for i, accessorytable in ipairs(TableOfAccessories) do
+				local Accessory : Accessory = accessorytable.Object
+				if not ValidateAccessoryOwner(Player, Accessory) then return end
+				if not accessorytable.IsItemPack then
+					local Obj = accessorytable.Object
+					local Handle = Obj.Handle
+					local Mesh = Handle:FindFirstChildOfClass("SpecialMesh")
+					if Mesh then
+						-- accessorytable.Scale is now the actual visual size.
+						-- Do NOT shrink it again here.
+						Mesh.Scale = accessorytable.Scale
+
+						if accessorytable.WeldPart == "Head" then
+							Accessory:SetAttribute("HeadScaleHandledByCustomizer", true)
+						end
+					else
+						Handle.Size = Handle.Size
+					end
+				end
+			end
+			return true
 		end
 	end,
 	Rotation = function(self,Player,TableOfAccessories)
 		if self[Player.Name] then
-			return AccessoryEditService.SetWeldTransform(Player, TableOfAccessories, ValidateAccessoryOwner)
+			for i, accessorytable in ipairs(TableOfAccessories) do
+				local Accessory : Accessory = accessorytable.Object
+				if not ValidateAccessoryOwner(Player, Accessory) then return end
+				if accessorytable.IsItemPack then
+					local Obj = accessorytable.Object
+					local Handle = Obj.Handle
+					local Weld = Handle:FindFirstChild("AccessoryWeld")
+					Weld.C0 = accessorytable.AccessoryWeld.C0
+					Weld.C1 = accessorytable.AccessoryWeld.C1
+				else
+					local Obj = accessorytable.Object
+					local Handle = Obj.Handle
+					local Weld = Handle:FindFirstChildOfClass("Weld")
+					Weld.C0 = accessorytable.AccessoryWeld.C0
+					Weld.C1 = accessorytable.AccessoryWeld.C1
+				end
+			end
+			return true
 		end
 	end,
 	WeldPart = function(self, Player, SelectedAccessories, PartName)
 		if self[Player.Name] then
-			return AccessoryEditService.SetWeldPart(Player, SelectedAccessories, PartName, ValidateAccessoryOwner)
+			for i, tableAssociated in ipairs(SelectedAccessories) do
+				local Accessory : Accessory = tableAssociated.Object
+				if not ValidateAccessoryOwner(Player, Accessory) then return end
+				if tableAssociated["IsItemPack"] then
+					tableAssociated.Object.Handle:FindFirstChild("AccessoryWeld").Part1 = Player.Character:FindFirstChild(PartName)
+				elseif not tableAssociated.IsItemPack and not tableAssociated.IsMeshPart then
+					tableAssociated.Object.Handle:FindFirstChildOfClass("Weld").Part1 = Player.Character:FindFirstChild(PartName)
+				end
+
+
+			end
+			return true
 		end
 	end,
 	MirrorAccessory = function(self, Player, SelectedAccessories)
 		if self[Player.Name] then
-			return AccessoryEditService.MirrorAccessories(Player, SelectedAccessories, ValidateAccessoryOwner, OppositeBodyParts, MirrorCFrameAcrossCharacter, RecalculateAccessoryTransformData)
+			local character = Player.Character
+			local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+			if not rootPart then return false end
+
+			local mirroredAny = false
+
+			for i, accessoryTable in ipairs(SelectedAccessories) do
+				if not accessoryTable.IsMeshPart then
+					local Accessory : Accessory = accessoryTable.Object
+					if not ValidateAccessoryOwner(Player, Accessory) then return end
+
+					local currentPartName = accessoryTable.WeldPart
+					local targetPartName = OppositeBodyParts[currentPartName]
+					local targetPart = targetPartName and character:FindFirstChild(targetPartName)
+					local sourcePart = currentPartName and character:FindFirstChild(currentPartName)
+					local handle = Accessory and Accessory:FindFirstChild("Handle")
+					local weld = handle and (handle:FindFirstChild("AccessoryWeld") or handle:FindFirstChildOfClass("Weld"))
+
+					if targetPart and sourcePart and handle and weld then
+						local currentHandleWorld = sourcePart.CFrame * accessoryTable.AccessoryWeld.C0:Inverse()
+						local rootRelative = rootPart.CFrame:ToObjectSpace(currentHandleWorld)
+						local mirroredRootRelative = MirrorCFrameAcrossCharacter(rootRelative)
+						local mirroredHandleWorld = rootPart.CFrame * mirroredRootRelative
+
+						weld.Part1 = targetPart
+						weld.C0 = mirroredHandleWorld:ToObjectSpace(targetPart.CFrame)
+						weld.C1 = CFrame.new(0, 0, 0)
+
+						accessoryTable.WeldPart = targetPartName
+						accessoryTable.AccessoryWeld.C0 = weld.C0
+						accessoryTable.AccessoryWeld.C1 = weld.C1
+						RecalculateAccessoryTransformData(accessoryTable, character)
+						mirroredAny = true
+					end
+				end
+			end
+
+			return mirroredAny and SelectedAccessories or false
 		end
 	end,
 	LimbRemover = function(self, Player, LimbName, SetType)
 		if self[Player.Name] then
-			LimbService.SetLiveLimbTransparency(Player, LimbName, SetType)
+			local Limb = Player.Character:FindFirstChild(LimbName)
+			if Limb then
+				Limb.Transparency = SetType
+			end
 		end
 		return true
 	end,
@@ -535,15 +2666,53 @@ local Customization = {
 	end,
 
 	OToggle = function(self, Player, SelectedAccessories, Value)
-		return AccessoryEditService.SetOverlayMode(Player, SelectedAccessories, Value, ValidateAccessoryOwner, CreateOverlay, DeleteOverlay)
+		if Value == "Overlay" then -- turn it on
+			for i, AccessoryTable in pairs(SelectedAccessories) do
+				if not AccessoryTable.IsItemPack then
+					AccessoryTable.ColorMode = "Overlay"
+					local Accessory : Accessory = AccessoryTable.Object
+					if not ValidateAccessoryOwner(Player, Accessory) then return end
+					CreateOverlay(Accessory, AccessoryTable.OTransparency, AccessoryTable.OColor)
+					if not AccessoryTable.IsMeshPart then
+						--Accessory.Handle:FindFirstChildOfClass("SpecialMesh").VertexColor = Vector3.new(1,1,1)
+					end
+				end
+			end
+		elseif Value == "VertexColor" then
+			for i, AccessoryTable in pairs(SelectedAccessories) do
+				if not AccessoryTable.IsItemPack then
+					AccessoryTable.ColorMode = "VertexColor"
+					local Accessory : Accessory = AccessoryTable.Object
+					if not ValidateAccessoryOwner(Player, Accessory) then return end
+					DeleteOverlay(Accessory)
+					if not AccessoryTable.IsMeshPart then
+						Accessory.Handle:FindFirstChildOfClass("SpecialMesh").VertexColor = AccessoryTable.Color
+					end
+				end
+			end
+		end
+		return SelectedAccessories
 	end,
 
 	OTransparency = function(self, Player, SelectedAccessories, Value)
-		return AccessoryEditService.SetOverlayTransparency(Player, SelectedAccessories, Value, ValidateAccessoryOwner, ChangeOverlay)
+		for i, AccessoryTable in pairs(SelectedAccessories) do
+			local Accessory : Accessory = AccessoryTable.Object
+			if not ValidateAccessoryOwner(Player, Accessory) then return end
+
+			ChangeOverlay(Accessory, Value, AccessoryTable.OColor)
+
+		end
+		return true
 	end,
 
 	OColor = function(Self, Player, SelectedAccessories, Value)
-		return AccessoryEditService.SetOverlayColor(Player, SelectedAccessories, Value, ValidateAccessoryOwner, ChangeOverlay)
+		for i, AccessoryTable in pairs(SelectedAccessories) do
+			local Accessory : Accessory = AccessoryTable.Object
+			if not ValidateAccessoryOwner(Player, Accessory) then return end
+
+			ChangeOverlay(Accessory, AccessoryTable.OTransparency, Value)
+
+		end
 	end,
 
 
@@ -796,27 +2965,282 @@ local Customization = {
 	end,
 
 	SaveOutfitID = function(self, Player, OutfitID, CharacterTable, LockID)
-		return ShareIdService.SaveOutfitId(Player, OutfitID, CharacterTable, LockID, OutfitIDsDataStore, SerializeTable)
+		print("OUTFIT ID:", OutfitID)
+		if OutfitID then
+
+			if CharacterTable["LockedID"] then
+				if CharacterTable["LockedID"] ~= Player.UserId then
+					warn("Outfit is locked, denying changes.")
+					return false
+				end
+			end
+
+			local success, result = pcall(function()
+
+
+				local NewSlot = { 
+					["SlotName"] = OutfitID,
+					["Data"] = CharacterTable
+
+				}
+
+				local newS = SerializeTable(NewSlot)
+				OutfitIDsDataStore:SetAsync(tostring(OutfitID), newS)
+				return
+			end)
+
+			if success then return OutfitID else warn(result) return false end
+
+		else
+
+			if LockID then CharacterTable["LockedID"] = Player.UserId else CharacterTable.LockedID = nil end
+
+			local function CheckIfUsedAndFindNew()
+				local seed = tick()
+				math.randomseed(seed)
+				local random = math.random(100000, 999999)
+				print("New OutfitID:", random)
+
+				local found = OutfitIDsDataStore:GetAsync(tostring(random))
+
+				if found then
+					return CheckIfUsedAndFindNew()
+				else
+					return random
+				end
+			end
+
+			OutfitID = CheckIfUsedAndFindNew()
+
+			local success, result = pcall(function()
+
+				local NewSlot = { 
+					["SlotName"] = OutfitID,
+					["Data"] = CharacterTable
+
+				}
+
+				local newS = SerializeTable(NewSlot)
+				OutfitIDsDataStore:SetAsync(tostring(OutfitID), newS)
+				return
+			end)
+			if success then return OutfitID, Player.UserId else warn(result) return false end
+		end
+
 	end,
 
 	LoadOutfitID = function(self, Player, OutfitID)
-		return ShareIdService.LoadOutfitId(Player, OutfitID, OutfitIDsDataStore, DeserializeTable, LoadCharacter)
+		if OutfitID then
+			local success, result = pcall(function()
+				local found = OutfitIDsDataStore:GetAsync(tostring(OutfitID))	
+				return found
+			end)
+
+			if success then
+				if result then
+
+					result = DeserializeTable(result)
+					result = LoadCharacter(Player, result)
+					return result
+				else
+					warn("ID", OutfitID, "doesn't exist.")
+					return result
+
+				end
+			else
+				warn(result)
+				return false
+			end
+
+		else
+			warn("No Outfit ID provided.")
+			return false
+		end
 	end,
 
 	SaveAccessoryID = function(self, Player, ID, SelectedAccessories, LockID)
-		return ShareIdService.SaveAccessoryId(Player, ID, SelectedAccessories, LockID, AccessoryIDsDataStore, SerializeTable, SerializeAccessoryTable, GetMaxAccessoriesForPlayer)
+		print("OUTFIT ID:", ID)
+		if typeof(SelectedAccessories) ~= "table" or #SelectedAccessories > GetMaxAccessoriesForPlayer(Player) then return false end
+		if ID then
+
+
+			local success, result = pcall(function()
+
+
+				local NewSlot = { 
+					["SlotName"] = ID,
+					["Data"] = SelectedAccessories
+				}
+
+				local newS = SerializeTable(NewSlot)
+				AccessoryIDsDataStore:SetAsync(tostring(ID), newS)
+				return
+			end)
+
+			if success then return ID else warn(result) return false end
+
+		else
+
+			local function CheckIfUsedAndFindNew()
+				local seed = tick()
+				math.randomseed(seed)
+				local random = math.random(100000, 999999)
+				print("New AccessoryID:", random)
+
+				local found = AccessoryIDsDataStore:GetAsync(tostring(random))
+
+				if found then
+					return CheckIfUsedAndFindNew()
+				else
+					return random
+				end
+			end
+
+			ID = CheckIfUsedAndFindNew()
+
+			local success, result = pcall(function()
+
+				local NewSlot = { 
+					["SlotName"] = ID,
+					["Data"] = SelectedAccessories,
+					["Locked"] = true,
+
+				}
+				local newS = SerializeAccessoryTable(NewSlot)
+				AccessoryIDsDataStore:SetAsync(tostring(ID), newS)
+				return
+			end)
+			if success then return ID, Player.UserId else warn(result) return false end
+		end
+
 	end,
 
 	LoadAccessoryID = function(self, player, ID)
-		return ShareIdService.LoadAccessoryId(player, ID, {
-			AccessoryIDsDataStore = AccessoryIDsDataStore,
-			DeserializeAccessoryTable = DeserializeAccessoryTable,
-			GetMaxAccessoriesForPlayer = GetMaxAccessoriesForPlayer,
-			DefaultAccessory = DefaultAccessory,
-			InsertService = InsertService,
-			CreateOverlay = CreateOverlay,
-			ApplyParticleData = ApplyParticleData,
-		})
+
+		local success, result = pcall(function()
+			warn("Getting Accessory ID thingy", ID)
+			return AccessoryIDsDataStore:GetAsync(tostring(ID))
+		end)
+		warn("results:", success, result)
+		if success and result then
+			warn(result)
+			local SlotData = DeserializeAccessoryTable(result)
+			local Character = player.Character
+			local AccCount = 0
+			for i, v in pairs(Character:GetChildren()) do
+				if v:IsA("Accessory") then
+					AccCount = AccCount + 1
+				end
+			end
+
+			local max = GetMaxAccessoriesForPlayer(player)
+
+
+			warn("MAX:", max)
+			if (AccCount + #SlotData["Data"]) > max then return false end
+			for i, AccessoryTable in pairs(SlotData["Data"]) do
+				--print("i:", i, "table:", AccessoryTable)
+				if not AccessoryTable.IsMeshPart then
+					if AccessoryTable.DistanceFromOriginC0 then
+						AccessoryTable.DistanceFromOrigin = AccessoryTable.DistanceFromOriginC0
+						AccessoryTable.DistanceFromOriginC0 = nil
+					end
+					local NewAccessory = DefaultAccessory:Clone()
+					NewAccessory.Name = AccessoryTable.Name
+					NewAccessory.AttachmentForward = AccessoryTable.AttachmentForward
+					NewAccessory.AttachmentPos = AccessoryTable.AttachmentPos
+					NewAccessory.AttachmentRight = AccessoryTable.AttachmentRight
+					NewAccessory.AttachmentUp = AccessoryTable.AttachmentUp
+
+					AccessoryTable.Object = NewAccessory
+					NewAccessory.Handle.OriginalSize.Value = AccessoryTable["OriginalSize"]
+
+
+					NewAccessory.Handle.Size = AccessoryTable.HandleSize
+					NewAccessory.Handle.Color = Color3.new(AccessoryTable.Color.X, AccessoryTable.Color.Y, AccessoryTable.Color.Z)
+
+					local NewAttachment = NewAccessory.Handle:FindFirstChildOfClass("Attachment")
+					NewAttachment.Name = AccessoryTable.Attachment.Name
+					NewAttachment.Axis = AccessoryTable.Attachment.Axis
+					NewAttachment.SecondaryAxis = AccessoryTable.Attachment.SecondaryAxis
+					NewAttachment.Position = AccessoryTable.Attachment.Position
+					NewAttachment.Orientation = AccessoryTable.Attachment.Orientation
+
+					local NewMesh = NewAccessory.Handle:FindFirstChildOfClass("SpecialMesh")
+
+					NewMesh.MeshId = AccessoryTable["MeshId"]
+					NewMesh.TextureId = AccessoryTable.TextureId
+					NewMesh.VertexColor = AccessoryTable["Color"]
+					NewMesh.Offset = AccessoryTable.Offset
+					NewMesh.Scale = AccessoryTable.Scale
+
+					NewAccessory.Handle.Transparency = AccessoryTable["Transparency"]
+					NewAccessory.Handle.Material = AccessoryTable.Material
+
+					Character.Humanoid:AddAccessory(NewAccessory)
+
+					local NewWeld = NewAccessory.Handle:FindFirstChildOfClass("Weld")
+					NewWeld.Part1 = Character:FindFirstChild(AccessoryTable["WeldPart"])
+
+					NewMesh.Offset = AccessoryTable.Offset
+					NewMesh.Scale = AccessoryTable.Scale
+
+
+					ApplyParticleData(AccessoryTable, NewAccessory.Handle)
+
+
+					--SlotData.Accessories[i].OriginalC0 = NewAccessory.Handle.CFrame:ToObjectSpace(NewWeld.Part1.CFrame)
+					--SlotData.Accessories[i].OriginalC1 = CFrame.new(0,0,0)
+
+					NewWeld.C0 = AccessoryTable.AccessoryWeld.C0
+					NewWeld.C1 = CFrame.new(0,0,0)
+
+					if not AccessoryTable["DistanceFromOrigin"] then
+						AccessoryTable["DistanceFromOrigin"] = AccessoryTable["AccessoryWeld"]["C0"].Position - AccessoryTable["OriginalC0"].Position
+					end
+
+
+					if not AccessoryTable.RotationsApplied then
+						local X, Y, Z = AccessoryTable["AccessoryWeld"]["C0"]:ToEulerAnglesXYZ()
+						local X1, Y1, Z1 = AccessoryTable["OriginalC0"]:ToEulerAnglesXYZ()
+						AccessoryTable["RotationsApplied"] = Vector3.new(X-X1, Y-Y1, Z-Z1)
+					end
+				else -- meshparts
+					local Humanoid = player.Character.Humanoid
+					warn("Meshpart loading found!", AccessoryTable.AccessoryId)
+					local AccessoryId = AccessoryTable.AccessoryId
+					local InsertedAccessory = InsertService:LoadAsset(AccessoryId)
+					InsertedAccessory.Parent = workspace
+					InsertedAccessory = InsertedAccessory:FindFirstChildOfClass("Accessory")
+					InsertedAccessory.Handle.Transparency = AccessoryTable.Transparency
+
+					local newVal = Instance.new("IntValue")
+					newVal.Value = AccessoryId
+					newVal.Name = "AccessoryId"
+					newVal.Parent = InsertedAccessory
+
+					InsertedAccessory.Parent = workspace
+					Humanoid:AddAccessory(InsertedAccessory)
+
+					AccessoryTable.Object = InsertedAccessory
+
+					if AccessoryTable.ColorMode == "Overlay" then
+						local OTransparency = AccessoryTable.OTransparency
+						local OColor = AccessoryTable.Color or AccessoryTable.OColor
+						CreateOverlay(AccessoryTable.Object, OTransparency, OColor)
+					end
+
+					ApplyParticleData(AccessoryTable, InsertedAccessory.Handle)
+
+				end
+			end
+
+			return SlotData["Data"]
+		else
+			return false
+		end
+
+
 	end,
 
 	LoadLegacy = function(self, Player, Slot)
@@ -849,10 +3273,22 @@ local Customization = {
 		end
 	end,
 	Tutorial = function(self, Player)
-		return SaveDataService.GetTutorial(Player, TutorialDataStore)
+		local success, res = pcall(function()
+			return TutorialDataStore:GetAsync(Player.UserId)
+		end)
+		if success then
+			if res == nil then res = false end
+			return res
+		else
+			return true
+		end
 	end,
 	SetTutorial = function(self, Player, val)
-		return SaveDataService.SetTutorial(Player, val, TutorialDataStore)
+		local success, res = pcall(function()
+			TutorialDataStore:SetAsync(Player.UserId, val)
+			return
+		end)
+		return true
 	end
 }
 
@@ -878,22 +3314,94 @@ local function NormalizeCharacterAccessories(Character)
 end
 
 function Customization.IndexPlayer(player)
-	return PlayerIndexService.IndexPlayer(player, Customization, CachedCharacterData, CachedPlayerSlotNames, CachedLegacyCharacterData, {
-		Constants = Constants,
-		MarketplaceService = MarketplaceService,
-		GroupVerif = GroupVerif,
-		RunService = RunService,
-		vipwhitelist = vipwhitelist,
-		SlotNameDS = SlotNameDS,
-		GetSaveFromSlot = GETSaveFromSlot,
-		GetAllLegacyData = GetAllLegacyData,
-		NormalizeCharacterAccessories = NormalizeCharacterAccessories,
-		DatastoresDownGui = script.DatastoresDown,
-	})
+	if Customization[player.Name] == player and CachedCharacterData[tostring(player.UserId)] ~= nil and CachedPlayerSlotNames[player.UserId] ~= nil then warn("ALREADY HAS SOMEHOW") return end
+	print("Loading character information for new player:", player)
+	Customization[player.Name] = player
+	CachedCharacterData[tostring(player.UserId)] = {}
+	local bigtable = {}
+	local Slots = Constants.BaseSaveSlots
+	local SaveSlots1, SaveSlots2, SaveSlots3 = MarketplaceService:UserOwnsGamePassAsync(player.UserId, 21918073), MarketplaceService:UserOwnsGamePassAsync(player.UserId, 53597806), MarketplaceService:UserOwnsGamePassAsync(player.UserId, 144388696)
+	if SaveSlots1 then
+		Slots = math.clamp(Slots * 2, Slots, Constants.SpecialMaxSaveSlots)
+	end
+	if SaveSlots2 then
+		Slots = math.clamp(Slots * 2, Slots, Constants.SpecialMaxSaveSlots)
+	end
+	if SaveSlots3 then
+		Slots = math.clamp(Slots * 2, Slots, Constants.SpecialMaxSaveSlots)
+	end
+	if vipwhitelist[player.UserId] or GroupVerif.CheckRank(player, "Gamemaster") or RunService:IsStudio() then
+		Slots = Constants.SpecialMaxSaveSlots
+	end
+
+	local success, res = pcall(function()
+		return SlotNameDS:GetAsync(player.UserId)
+	end)
+	if success then
+		if res == nil then
+			warn("Player is not using the more efficient PlayerSlotName Datastore. Converting now.")
+			for i = 1, Slots do
+				local returnedTable = GETSaveFromSlot(player.UserId, true, i)
+				if returnedTable ~= nil then
+					bigtable[tostring(i)] = nil
+				end
+				bigtable[tostring(i)] = returnedTable
+				wait()
+			end
+			local newTable = {}
+			for i, v in pairs(bigtable) do
+				newTable[i] = v.SlotName
+			end
+			wait(2)
+			local success, res = pcall(function()
+				SlotNameDS:SetAsync(player.UserId, newTable)
+			end)
+			CachedPlayerSlotNames[player.UserId] = newTable
+		else
+			warn("Player is using the PlayerSlotName Datastore. Updating cache.")
+			CachedPlayerSlotNames[player.UserId] = res
+			-- this is just for today
+
+
+		end
+	else
+		warn("Data stores are down!")
+		local gui = script.DatastoresDown:Clone()
+		gui.Parent = player.PlayerGui
+	end
+
+
+	--CachedCharacterData[tostring(player.UserId)] = deepCopy(bigtable)
+	--warn("SAVE DATA:", CachedCharacterData[player.UserId])
+	local returnedLegacySave = GetAllLegacyData(player)
+	if returnedLegacySave then
+		print(player, " has legacy data")
+		CachedLegacyCharacterData[tostring(player.UserId)] = returnedLegacySave
+	end
+
+	player.CharacterAdded:Connect(function(character)
+		task.wait(0.3)
+		warn("CUSTOMIZATON : ", "CHARACTER ADDED", player.Name)
+		NormalizeCharacterAccessories(character)
+	end)
+
+	local function executeRegardless()
+		task.wait(0.3)
+		warn("CUSTOMIZATON : ", "EXECUTE REG.", player.Name)
+		NormalizeCharacterAccessories(player.Character)
+	end
+
+	repeat task.wait() until player.Character
+	executeRegardless()
 end
 
 game.Players.PlayerRemoving:Connect(function(player)
-	PlayerIndexService.RemovePlayer(player, Customization, CachedCharacterData, CachedLegacyCharacterData, CachedPlayerSlotNames, SlotNameDS)
+	Customization[player.Name] = false
+	Customization[player.Name] = nil
+	CachedCharacterData[tostring(player.UserId)] = nil
+	CachedLegacyCharacterData[player.UserId] = nil
+	SlotNameDS:SetAsync(player.UserId, CachedPlayerSlotNames[player.UserId])
+	CachedPlayerSlotNames[player.UserId] = nil
 end)
 
 CustomizingEvent.OnServerEvent:Connect(function(client, Arg)
