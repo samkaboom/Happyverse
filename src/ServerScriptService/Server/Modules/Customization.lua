@@ -57,6 +57,9 @@ local Overlays = require(CustomizationModules:WaitForChild("Overlays"))
 local HeadAccessoryScaling = require(CustomizationModules:WaitForChild("HeadAccessoryScaling"))
 local ParticleEffects = require(CustomizationModules:WaitForChild("ParticleEffects"))
 local ServiceRetries = require(CustomizationModules:WaitForChild("ServiceRetries"))
+local AccessorySaveSerialization = require(CustomizationModules:WaitForChild("AccessorySaveSerialization"))
+local CustomizationUtilities = require(CustomizationModules:WaitForChild("CustomizationUtilities"))
+local CharacterLoader = require(CustomizationModules:WaitForChild("CharacterLoader"))
 
 local DefaultType = 0.25
 local DefaultProportion = 0
@@ -94,6 +97,21 @@ local UserOwnsGamePassWithCache = RetryOperations.UserOwnsGamePassWithCache
 local LoadAssetWithRetry = RetryOperations.LoadAssetWithRetry
 local FilterStringWithRetry = RetryOperations.FilterStringWithRetry
 local GetFilteredBroadcastTextWithRetry = RetryOperations.GetFilteredBroadcastTextWithRetry
+local SaveSerialization = AccessorySaveSerialization.new(HttpService, Serialization)
+local SerializeTable = SaveSerialization.SerializeTable
+local SerializeAccessoryTable = SaveSerialization.SerializeAccessoryTable
+local DeserializeTable = SaveSerialization.DeserializeTable
+local DeserializeAccessoryTable = SaveSerialization.DeserializeAccessoryTable
+local TextFiltering = CustomizationUtilities.CreateTextFiltering(FilterStringWithRetry, GetFilteredBroadcastTextWithRetry)
+local LimbRemover = CustomizationUtilities.LimbRemover
+local deepCopy = CustomizationUtilities.DeepCopy
+local round = CustomizationUtilities.Round
+local ValidateAccessoryOwner = CustomizationUtilities.ValidateAccessoryOwner
+local MirrorVectorAcrossCharacter = CustomizationUtilities.MirrorVectorAcrossCharacter
+local MirrorCFrameAcrossCharacter = CustomizationUtilities.MirrorCFrameAcrossCharacter
+local RecalculateAccessoryTransformData = CustomizationUtilities.RecalculateAccessoryTransformData
+local GetFilteredBroadcastText = TextFiltering.GetFilteredBroadcastText
+local FilterBroadcastText = TextFiltering.FilterBroadcastText
 
 local function CreateOverlay(accessory : Accessory, Transparency : number, Color : Color3)
 	return Overlays.Create(accessory, ServerAssets.Overlay, Transparency, Color)
@@ -234,210 +252,6 @@ local function POSTSave(UserId, Table, Slot, IgnoreCache) -- loading
 		return false
 	end
 
-end
-
-local SerializeVector3 = Serialization.SerializeVector3
-local DeserializeVector3 = Serialization.DeserializeVector3
-local SerializeColor3 = Serialization.SerializeColor3
-local DeserializeColor3 = Serialization.DeserializeColor3
-local SerializeCFrame = Serialization.SerializeCFrame
-local DeserializeCFrame = Serialization.DeserializeCFrame
-local SerializeMaterial = Serialization.SerializeMaterial
-local DeserializeMaterial = Serialization.DeserializeMaterial
-
-local function SetDefaultSerializedParticleData(AccessoryTable)
-	AccessoryTable.Particle = "None"
-	AccessoryTable.ParticleColor = {["R"] = 1, ["G"] = 1, ["B"] = 1}
-	AccessoryTable.ParticleSize = 0
-	AccessoryTable.ParticleTransparency = 0
-	AccessoryTable.ParticleRate = 0
-end
-
-local function SetDefaultParticleData(AccessoryTable)
-	AccessoryTable.Particle = "None"
-	AccessoryTable.ParticleColor = Color3.fromRGB(255,255,255)
-	AccessoryTable.ParticleSize = 0
-	AccessoryTable.ParticleTransparency = 0
-	AccessoryTable.ParticleRate = 0
-end
-
-local function GetRootRotationFromC0(C0)
-	local X, Y, Z = C0:Inverse():ToEulerAnglesXYZ()
-	return X, Y, Z
-end
-
-local function SerializeOverlayColorData(AccessoryTable)
-	if not AccessoryTable.OColor then AccessoryTable.OColor = Color3.new(1,1,1) end
-	AccessoryTable.OColor = SerializeColor3(AccessoryTable.OColor)
-
-	if not AccessoryTable.OriginalOColor then AccessoryTable.OriginalOColor = Color3.new(1,1,1) end
-	AccessoryTable.OriginalOColor = SerializeColor3(AccessoryTable.OriginalOColor)
-end
-
-local function SerializeParticleData(AccessoryTable)
-	if AccessoryTable.Particle == nil then
-		SetDefaultSerializedParticleData(AccessoryTable)
-	else
-		AccessoryTable.ParticleColor = SerializeColor3(AccessoryTable.ParticleColor)
-	end
-end
-
-local function DeserializeParticleData(AccessoryTable)
-	if AccessoryTable.Particle == nil then
-		SetDefaultParticleData(AccessoryTable)
-	else
-		AccessoryTable.ParticleColor = DeserializeColor3(AccessoryTable.ParticleColor)
-		if AccessoryTable.ParticleSize == nil then
-			AccessoryTable.ParticleSize = 0
-			AccessoryTable.ParticleTransparency = 0
-			AccessoryTable.ParticleRate = 0
-		end
-	end
-end
-
-local function SerializeTransformData(AccessoryTable, IncludeRevertC0)
-	AccessoryTable.AccessoryWeld.C0 = SerializeCFrame(AccessoryTable.AccessoryWeld.C0)
-	AccessoryTable.AccessoryWeld.C1 = SerializeCFrame(AccessoryTable.AccessoryWeld.C1)
-
-	if not AccessoryTable.RootRotation then
-		local X, Y, Z = GetRootRotationFromC0(AccessoryTable.OriginalC0)
-		AccessoryTable.RootRotation = {["X"] = X, ["Y"] = Y, ["Z"] = Z}
-	else
-		AccessoryTable.RootRotation = SerializeVector3(AccessoryTable.RootRotation)
-	end
-
-	if IncludeRevertC0 then
-		AccessoryTable.RevertC0 = SerializeCFrame(AccessoryTable.RevertC0 or AccessoryTable.OriginalC0)
-	end
-
-	AccessoryTable.OriginalC0 = SerializeCFrame(AccessoryTable.OriginalC0)
-
-	if AccessoryTable.DistanceFromOriginC0 then
-		AccessoryTable.DistanceFromOrigin = AccessoryTable.DistanceFromOriginC0
-		AccessoryTable.DistanceFromOriginC0 = nil
-	end
-	AccessoryTable.DistanceFromOrigin = SerializeVector3(AccessoryTable.DistanceFromOrigin)
-
-	AccessoryTable.OriginalC1 = SerializeCFrame(AccessoryTable.OriginalC1)
-
-	if AccessoryTable.RotationsApplied then
-		AccessoryTable.RotationsApplied = SerializeVector3(AccessoryTable.RotationsApplied)
-	end
-end
-
-local function DeserializeTransformData(AccessoryTable, IncludeRevertC0)
-	AccessoryTable.AccessoryWeld.C0 = DeserializeCFrame(AccessoryTable.AccessoryWeld.C0)
-	AccessoryTable.AccessoryWeld.C1 = DeserializeCFrame(AccessoryTable.AccessoryWeld.C1)
-
-	if IncludeRevertC0 then
-		AccessoryTable.RevertC0 = DeserializeCFrame(AccessoryTable.RevertC0 or AccessoryTable.OriginalC0)
-	end
-
-	AccessoryTable.OriginalC0 = DeserializeCFrame(AccessoryTable.OriginalC0)
-	if not AccessoryTable.RootRotation then
-		local X, Y, Z = GetRootRotationFromC0(AccessoryTable.OriginalC0)
-		AccessoryTable.RootRotation = Vector3.new(X,Y,Z)
-	else
-		AccessoryTable.RootRotation = DeserializeVector3(AccessoryTable.RootRotation)
-	end
-
-	AccessoryTable.OriginalC1 = DeserializeCFrame(AccessoryTable.OriginalC1)
-
-	if AccessoryTable.DistanceFromOriginC0 then
-		AccessoryTable.DistanceFromOrigin = DeserializeVector3(AccessoryTable.DistanceFromOriginC0)
-		AccessoryTable.DistanceFromOriginC0 = nil
-	else
-		AccessoryTable.DistanceFromOrigin = DeserializeVector3(AccessoryTable.DistanceFromOrigin)
-	end
-
-	if AccessoryTable.RotationsApplied then
-		AccessoryTable.RotationsApplied = DeserializeVector3(AccessoryTable.RotationsApplied)
-	end
-end
-
-local function SerializeStandardAccessoryData(AccessoryTable, IncludeRevertC0)
-	SerializeOverlayColorData(AccessoryTable)
-
-	if not AccessoryTable.ColorMode then AccessoryTable.ColorMode = "VertexColor" end
-	SerializeParticleData(AccessoryTable)
-
-	AccessoryTable.Object = nil
-	AccessoryTable.Color = SerializeVector3(AccessoryTable.Color)
-	AccessoryTable.OriginalColor = SerializeVector3(AccessoryTable.OriginalColor)
-	AccessoryTable.Material = SerializeMaterial(AccessoryTable.Material)
-	AccessoryTable.OriginalMaterial = SerializeMaterial(AccessoryTable.OriginalMaterial)
-	AccessoryTable.OriginalSize = SerializeVector3(AccessoryTable.OriginalSize)
-	AccessoryTable.HandleSize = SerializeVector3(AccessoryTable.HandleSize)
-
-	SerializeTransformData(AccessoryTable, IncludeRevertC0)
-
-	AccessoryTable.Scale = SerializeVector3(AccessoryTable.Scale)
-	AccessoryTable.RevertScale = SerializeVector3(AccessoryTable.RevertScale)
-	AccessoryTable.RootScale = SerializeVector3(AccessoryTable.RootScale)
-	AccessoryTable.Offset = SerializeVector3(AccessoryTable.Offset)
-
-	AccessoryTable.Attachment.Axis = SerializeVector3(AccessoryTable.Attachment.Axis)
-	AccessoryTable.Attachment.Orientation = SerializeVector3(AccessoryTable.Attachment.Orientation)
-	AccessoryTable.Attachment.SecondaryAxis = SerializeVector3(AccessoryTable.Attachment.SecondaryAxis)
-	AccessoryTable.Attachment.Position = SerializeVector3(AccessoryTable.Attachment.Position)
-
-	AccessoryTable.AttachmentForward = SerializeVector3(AccessoryTable.AttachmentForward)
-	AccessoryTable.AttachmentPos = SerializeVector3(AccessoryTable.AttachmentPos)
-	AccessoryTable.AttachmentRight = SerializeVector3(AccessoryTable.AttachmentRight)
-	AccessoryTable.AttachmentUp = SerializeVector3(AccessoryTable.AttachmentUp)
-end
-
-local function SerializeItemPackData(AccessoryTable)
-	AccessoryTable.Object = nil
-	SerializeTransformData(AccessoryTable, true)
-end
-
-local function SerializeMeshPartData(AccessoryTable)
-	SerializeOverlayColorData(AccessoryTable)
-
-	AccessoryTable.Material = SerializeMaterial(AccessoryTable.Material)
-	AccessoryTable.OriginalMaterial = SerializeMaterial(AccessoryTable.OriginalMaterial)
-	SerializeParticleData(AccessoryTable)
-end
-
-function SerializeTable(Table) -- makes it so datastores can use them
-	print("Serializer")
-	if type(Table) == "string" then warn("Table is already serialized.") return Table end
-
-	local SlotValue = Table
-	for Index, AccessoryTable in pairs(SlotValue["Data"]["Accessories"]) do
-		if not AccessoryTable.IsItemPack and not AccessoryTable.IsMeshPart then
-			if typeof(AccessoryTable.AccessoryWeld.C0) == "table" then warn("Already serialized, breaking off.") break end
-			SerializeStandardAccessoryData(AccessoryTable, true)
-		elseif AccessoryTable.IsItemPack then
-			SerializeItemPackData(AccessoryTable)
-		elseif AccessoryTable.IsMeshPart then
-			if typeof(AccessoryTable.OColor) == "table" then warn("Already serialized, breaking off.") break end
-			SerializeMeshPartData(AccessoryTable)
-		end
-	end
-
-	Table = HttpService:JSONEncode(Table)
-	warn("TABLE SIZE:", #Table)
-	return Table
-end
-
-function SerializeAccessoryTable(Table) -- makes it so datastores can use them
-	print("Serializer", Table)
-	if type(Table) == "string" then warn("Table is already serialized.") return Table end
-
-	for Index, AccessoryTable in pairs(Table["Data"]) do
-		if not AccessoryTable.IsMeshPart then
-			if typeof(AccessoryTable.AccessoryWeld.C0) == "table" then warn("Already serialized, breaking off.") break end
-			SerializeStandardAccessoryData(AccessoryTable, false)
-		else
-			if typeof(AccessoryTable.OColor) == "table" then warn("Already serialized, breaking off.") break end
-			SerializeMeshPartData(AccessoryTable)
-		end
-	end
-
-	Table = HttpService:JSONEncode(Table)
-	return Table
 end
 
 function DeserializeTable_Old(Table)
@@ -715,118 +529,6 @@ function DeserializeTable_Old(Table)
 	return Table
 end
 
-local function DeserializeStandardAccessoryData(AccessoryTable, IncludeRevertC0)
-	if not AccessoryTable.OColor then AccessoryTable.OColor = {R = 1, G = 1, B = 1} end
-	AccessoryTable.OColor = DeserializeColor3(AccessoryTable.OColor)
-
-	if not AccessoryTable.ColorMode then AccessoryTable.ColorMode = "VertexColor" end
-	if not AccessoryTable.OTransparency then AccessoryTable.OTransparency = 0.5 end
-
-	if not AccessoryTable.OriginalOColor then AccessoryTable.OriginalOColor = {R = 1, G = 1, B = 1} end
-	AccessoryTable.OriginalOColor = DeserializeColor3(AccessoryTable.OriginalOColor)
-
-	DeserializeParticleData(AccessoryTable)
-
-	AccessoryTable.Color = DeserializeVector3(AccessoryTable.Color)
-	AccessoryTable.OriginalColor = DeserializeVector3(AccessoryTable.OriginalColor)
-	AccessoryTable.Material = DeserializeMaterial(AccessoryTable.Material)
-	AccessoryTable.OriginalMaterial = DeserializeMaterial(AccessoryTable.OriginalMaterial)
-	AccessoryTable.OriginalSize = DeserializeVector3(AccessoryTable.OriginalSize)
-	AccessoryTable.HandleSize = DeserializeVector3(AccessoryTable.HandleSize)
-
-	DeserializeTransformData(AccessoryTable, IncludeRevertC0)
-
-	AccessoryTable.Scale = DeserializeVector3(AccessoryTable.Scale)
-	AccessoryTable.RootScale = DeserializeVector3(AccessoryTable.RootScale)
-	AccessoryTable.RevertScale = DeserializeVector3(AccessoryTable.RevertScale)
-	AccessoryTable.Offset = DeserializeVector3(AccessoryTable.Offset)
-
-	AccessoryTable.Attachment.Axis = DeserializeVector3(AccessoryTable.Attachment.Axis)
-	AccessoryTable.Attachment.SecondaryAxis = DeserializeVector3(AccessoryTable.Attachment.SecondaryAxis)
-	AccessoryTable.Attachment.Position = DeserializeVector3(AccessoryTable.Attachment.Position)
-	AccessoryTable.Attachment.Orientation = DeserializeVector3(AccessoryTable.Attachment.Orientation)
-
-	AccessoryTable.AttachmentForward = DeserializeVector3(AccessoryTable.AttachmentForward)
-	AccessoryTable.AttachmentPos = DeserializeVector3(AccessoryTable.AttachmentPos)
-	AccessoryTable.AttachmentUp = DeserializeVector3(AccessoryTable.AttachmentUp)
-	AccessoryTable.AttachmentRight = DeserializeVector3(AccessoryTable.AttachmentRight)
-end
-
-local function DeserializeItemPackData(AccessoryTable)
-	DeserializeTransformData(AccessoryTable, true)
-end
-
-local function DeserializeMeshPartData(AccessoryTable, SetColorMode)
-	if not AccessoryTable.OColor then AccessoryTable.OColor = {R = 1, G = 1, B = 1} end
-	AccessoryTable.OColor = DeserializeColor3(AccessoryTable.OColor)
-
-	if SetColorMode and not AccessoryTable.ColorMode then
-		AccessoryTable.ColorMode = "VertexColor"
-	end
-
-	if not AccessoryTable.OriginalOColor then AccessoryTable.OriginalOColor = {R = 1, G = 1, B = 1} end
-	AccessoryTable.OriginalOColor = DeserializeColor3(AccessoryTable.OriginalOColor)
-
-	AccessoryTable.Material = DeserializeMaterial(AccessoryTable.Material)
-	AccessoryTable.OriginalMaterial = DeserializeMaterial(AccessoryTable.OriginalMaterial)
-	DeserializeParticleData(AccessoryTable)
-end
-
-function DeserializeTable(Table)
-	print("DESERIALIZING TABLE")
-	if not Table then return end
-	if type(Table) == "string" then print("Have to decode it."); Table = HttpService:JSONDecode(Table) end
-
-	local SlotValue = Table
-	if SlotValue["Data"] == nil and #SlotValue > 0 then SlotValue = SlotValue[1] end -- outfit ids used to have a bug where it was a table inside a table rather than just a table like every other save
-
-	if SlotValue["Data"]["CharacterInformation"] == nil then
-		print("Old table pre-empowerment update.")
-		SlotValue["Data"]["CharacterName"] = nil
-		SlotValue["Data"]["CharacterInformation"] = {
-			["CharacterName"] = "",
-			["CharacterBio"] = "",
-			["EmpowermentType"] = "",
-			["IsCustomEmpowerment"] = false,
-			["EmpowermentTitle"] = "",
-			["Empowerment"] = "",
-			["Skills"] = {{}, {}, {}, {}, {}}
-		}
-	end
-
-	for Index, AccessoryTable in pairs(SlotValue["Data"]["Accessories"]) do
-		if not AccessoryTable.IsItemPack and not AccessoryTable.IsMeshPart then
-			if typeof(AccessoryTable.AccessoryWeld.C0) == "CFrame" then warn("Already deserialized, breaking off.") return Table end
-			DeserializeStandardAccessoryData(AccessoryTable, true)
-		elseif AccessoryTable.IsItemPack then
-			DeserializeItemPackData(AccessoryTable)
-		elseif AccessoryTable.IsMeshPart then
-			if typeof(AccessoryTable.OColor) == "Color3" then warn("Already deserialized, breaking off.") return Table end
-			DeserializeMeshPartData(AccessoryTable, true)
-		end
-	end
-
-	warn("STILL EXISTS?", SlotValue)
-	return SlotValue
-end
-
-function DeserializeAccessoryTable(Table)
-	if not Table then return end
-	if type(Table) == "string" then print("Have to decode it."); Table = HttpService:JSONDecode(Table) end
-
-	for Index, AccessoryTable in pairs(Table["Data"]) do
-		if not AccessoryTable.IsMeshPart then
-			if typeof(AccessoryTable.AccessoryWeld.C0) == "CFrame" then warn("Already deserialized, breaking off.") return Table end
-			DeserializeStandardAccessoryData(AccessoryTable, false)
-		else
-			if typeof(AccessoryTable.OColor) == "Color3" then warn("Already deserialized, breaking off.") return Table end
-			DeserializeMeshPartData(AccessoryTable, false)
-		end
-	end
-
-	return Table
-end
-
 local CachedAccessoriesUniversal= {}
 
 local TARGET_HEAD_ASSET_ID = HeadAccessoryScaling.TargetHeadAssetId
@@ -867,362 +569,26 @@ local function GetClassicClothingTemplate(assetId, className, templateProperty)
 	end
 end
 
-function LoadCharacter(Player, SlotData)
-
-	print("Load Character", Player, SlotData)
-	warn(Player.Name, "Save Data amount:", #HttpService:JSONEncode(SlotData))
-	SlotData = SlotData["Data"]
-
-	local Character = Player.Character
-
-	if Character:FindFirstChild("Shirt") == nil then local s = Instance.new("Shirt", Character); s.Name = "Shirt" end
-	if Character:FindFirstChild("Pants") == nil then local p = Instance.new("Pants", Character); p.Name = "Pants" end
-
-	local function HideCollisionParts(Character)
-		for _, obj in ipairs(Character:GetDescendants()) do
-			if obj.Name == "CollisionPart" and obj:IsA("BasePart") then
-				obj.Transparency = 1
-				obj.CastShadow = false
-			end
-		end
-	end
-
-	if tonumber(SlotData["ShirtTemplate"]) then
-		local id = GetClassicClothingTemplate(SlotData["ShirtTemplate"], "Shirt", "ShirtTemplate")
-
-		Character.Shirt.ShirtTemplate = id or "http://www.roblox.com/asset/?id=5574405815"
-	else
-		Character.Shirt.ShirtTemplate = SlotData["ShirtTemplate"] or "http://www.roblox.com/asset/?id=5574405815"
-	end
-
-	if tonumber(SlotData["PantsTemplate"]) then
-		local id = GetClassicClothingTemplate(SlotData["PantsTemplate"], "Pants", "PantsTemplate")
-		Character.Pants.PantsTemplate = id or "http://www.roblox.com/asset/?id=5574405815"
-	else
-		Character.Pants.PantsTemplate = SlotData["PantsTemplate"] or "http://www.roblox.com/asset/?id=5574420285"
-	end
-
-
-
-
-
-	-- PUT SOME CODE FOR THE NAME AND BIO SYSTEM
-
-	if SlotData["CharacterInformation"] == nil then
-		SlotData["CharacterInformation"] = {
-			["CharacterName"] = "",
-			["CharacterBio"] = "",
-			["CharacterImg"] = "",
-			["EmpowermentType"] = "",
-			["Empowerment"] = "",
-			["EmpowermentTitle"] = "",
-			["IsCustomEmpowerment"] =false,
-			["Skills"] = {
-				{}, {}, {}, {}, {}
-			}
-		}
-	end
-
-	local Folder = ReplicatedStorage.Info[Player.Name]
-	Folder.CName.Value = SlotData["CharacterInformation"]["CharacterName"]
-	Folder.CBio.Value = SlotData["CharacterInformation"]["CharacterBio"]
-	if SlotData["CharacterInformation"]["CharacterImg"] == nil then SlotData["CharacterInformation"]["CharacterImg"] = 0 end
-	if SlotData["CharacterInformation"]["CharacterImg"] ~= 0 then
-		Folder.CImage.Value = SlotData["CharacterInformation"]["CharacterImg"]
-	end
-	Folder.EmpowermentTitle.Value = SlotData["CharacterInformation"]["EmpowermentTitle"]
-	Folder.EmpowermentType.Value = SlotData["CharacterInformation"]["EmpowermentType"]
-	Folder.Empowerment.Value = SlotData["CharacterInformation"]["Empowerment"]
-
-
-	for i = 1, 5, 1 do 
-		local val = SlotData["CharacterInformation"].Skills[i]
-		warn("SKILL SLOT:", i, "VAL:", val)
-		if IsOccupiedSkills(val) then
-			print("MORE THAN 0, HAS INFO")
-			Folder["Skill" .. tostring(i) .. "Type"].Value = val.Type
-			Folder["Skill" .. tostring(i) .. "Title"].Value = val.Title
-			Folder["Skill" .. tostring(i) .. "Description"].Value = val.Skill
-		else
-			print("REMOVE")
-			Folder["Skill" .. tostring(i) .. "Type"].Value = ""
-			Folder["Skill" .. tostring(i) .. "Title"].Value = ""
-			Folder["Skill" .. tostring(i) .. "Description"].Value = ""
-		end
-	end
-
-	local Humanoid = Character.Humanoid
-	Humanoid.BodyWidthScale.Value = SlotData["Scale"]["Width"]
-	Humanoid.BodyHeightScale.Value = SlotData["Scale"]["Height"]
-	Humanoid.BodyDepthScale.Value = SlotData["Scale"]["Depth"]
-	Humanoid.BodyTypeScale.Value = DefaultType
-	Humanoid.BodyProportionScale.Value = DefaultProportion
-	local boostedHeadScale = (SlotData["Scale"]["Head"] or 1) * HEAD_SCALE_MULTIPLIER
-	Humanoid.HeadScale.Value = boostedHeadScale
-
-	local Description = Humanoid:GetAppliedDescription()
-	Description.RunAnimation = SlotData.Animations.RunAnimation
-	Description.IdleAnimation = SlotData.Animations.IdleAnimation
-	Description.WalkAnimation = SlotData.Animations.WalkAnimation
-	Description.HeightScale = SlotData.Scale.Height
-	Description.HeadScale = boostedHeadScale
-	Description.DepthScale = SlotData.Scale.Depth
-	Description.WidthScale = SlotData.Scale.Width
-
-	Humanoid:ApplyDescription(Description)
-
-	Humanoid.BodyWidthScale.Value = SlotData["Scale"]["Width"]-0.01
-	Humanoid.BodyHeightScale.Value = SlotData["Scale"]["Height"]-0.01
-	Humanoid.BodyDepthScale.Value = SlotData["Scale"]["Depth"]-0.01
-	Humanoid.BodyTypeScale.Value = 0.8-0.01
-	Humanoid.HeadScale.Value = boostedHeadScale - 0.01
-
-	Humanoid.BodyWidthScale.Value = SlotData["Scale"]["Width"]
-	Humanoid.BodyHeightScale.Value = SlotData["Scale"]["Height"]
-	Humanoid.BodyDepthScale.Value = SlotData["Scale"]["Depth"]
-	Humanoid.BodyTypeScale.Value = DefaultType
-	Humanoid.BodyProportionScale.Value = DefaultProportion
-	Humanoid.HeadScale.Value = boostedHeadScale
-
-	Character.Head.face.Texture = "rbxthumb://type=Asset&id=" .. tostring(SlotData["FaceID"]) .. "&w=420&h=420"
-
-	Character["Body Colors"].HeadColor3 = Color3.new(SlotData.BodyColors.Head.R, SlotData.BodyColors.Head.G, SlotData.BodyColors.Head.B)
-	Character["Body Colors"].RightArmColor3 = Color3.new(SlotData.BodyColors.RightArm.R, SlotData.BodyColors.RightArm.G, SlotData.BodyColors.RightArm.B)
-	Character["Body Colors"].LeftArmColor3 = Color3.new(SlotData.BodyColors.LeftArm.R, SlotData.BodyColors.LeftArm.G, SlotData.BodyColors.LeftArm.B)
-	Character["Body Colors"].TorsoColor3 = Color3.new(SlotData.BodyColors.Torso.R, SlotData.BodyColors.Torso.G, SlotData.BodyColors.Torso.B)
-	Character["Body Colors"].RightLegColor3 = Color3.new(SlotData.BodyColors.RightLeg.R, SlotData.BodyColors.RightLeg.G, SlotData.BodyColors.RightLeg.B)
-	Character["Body Colors"].LeftLegColor3 = Color3.new(SlotData.BodyColors.LeftLeg.R, SlotData.BodyColors.LeftLeg.G, SlotData.BodyColors.LeftLeg.B)
-
-	for i, v in pairs(Character:GetChildren()) do
-		if v:IsA("BasePart") or v:IsA("MeshPart") then
-			if v.Name ~= "HumanoidRootPart" then
-				v.Transparency = 0
-			end
-		end
-	end
-
-	for LimbName, v in pairs(SlotData["LimbRemover"]) do
-		if v == true then
-			local Limb = Character:FindFirstChild(LimbName)
-			if Limb then
-				Limb.Transparency = 1
-			end
-		end
-	end
-
-	for i, Accessory in pairs(Character:GetChildren()) do
-		if Accessory:IsA("Accessory") then
-			Accessory:Destroy()
-		elseif Accessory:GetAttribute("displayAccessory") == true  then
-
-			FindToolFromItem(Player, Accessory):Destroy()
-			Accessory:Destroy()
-		end
-	end
-
-
-	local NewAccessoryTable = {}
-	local IsIncorrectIndex = false
-	for i, AccessoryTable in pairs(SlotData["Accessories"]) do
-		--print("i:", i, "table:", AccessoryTable)
-		if not tonumber(i) then
-			IsIncorrectIndex = true
-		end
-		if AccessoryTable.DistanceFromOriginC0 then
-			AccessoryTable.DistanceFromOrigin = AccessoryTable.DistanceFromOriginC0
-			AccessoryTable.DistanceFromOriginC0 = nil
-		end
-
-		if not AccessoryTable.IsItemPack and not AccessoryTable.IsMeshPart then -- regular accessories
-
-			local NewAccessory = DefaultAccessory:Clone()
-			NewAccessory.Name = AccessoryTable.Name
-			NewAccessory.AttachmentForward = AccessoryTable.AttachmentForward
-			NewAccessory.AttachmentPos = AccessoryTable.AttachmentPos
-			NewAccessory.AttachmentRight = AccessoryTable.AttachmentRight
-			NewAccessory.AttachmentUp = AccessoryTable.AttachmentUp
-
-			AccessoryTable.Object = NewAccessory
-			NewAccessory.Handle.OriginalSize.Value = AccessoryTable["OriginalSize"]
-
-
-			NewAccessory.Handle.Size = AccessoryTable.HandleSize
-			NewAccessory.Handle.Color = Color3.new(AccessoryTable.Color.X, AccessoryTable.Color.Y, AccessoryTable.Color.Z)
-
-			local NewAttachment = NewAccessory.Handle:FindFirstChildOfClass("Attachment")
-			NewAttachment.Name = AccessoryTable.Attachment.Name
-			NewAttachment.Axis = AccessoryTable.Attachment.Axis
-			NewAttachment.SecondaryAxis = AccessoryTable.Attachment.SecondaryAxis
-			NewAttachment.Position = AccessoryTable.Attachment.Position
-			NewAttachment.Orientation = AccessoryTable.Attachment.Orientation
-
-			local NewMesh = NewAccessory.Handle:FindFirstChildOfClass("SpecialMesh")
-
-			NewMesh.MeshId = AccessoryTable["MeshId"]
-			NewMesh.TextureId = AccessoryTable.TextureId
-
-			NewMesh.Offset = AccessoryTable.Offset
-			ApplyHeadBoostAccessoryScale(AccessoryTable, NewAccessory, NewMesh)
-
-			if MeshIdMatches(AccessoryTable["MeshId"], TARGET_HEAD_ASSET_ID) then
-				local collisionPart = NewAccessory:FindFirstChild("CollisionPart", true)
-				if collisionPart and collisionPart:IsA("BasePart") then
-					collisionPart.Transparency = 1
-					collisionPart.CastShadow = false
-				end
-			end
-
-			NewAccessory.Handle.Transparency = AccessoryTable["Transparency"]
-			NewAccessory.Handle.Material = AccessoryTable.Material
-
-			NewAccessory.Parent = workspace
-			Character.Humanoid:AddAccessory(NewAccessory)
-
-			local NewWeld = NewAccessory.Handle:FindFirstChildOfClass("Weld")
-			NewWeld.Part1 = Character:FindFirstChild(AccessoryTable["WeldPart"])
-
-			NewMesh.Offset = AccessoryTable.Offset
-			ApplyHeadBoostAccessoryScale(AccessoryTable, NewAccessory, NewMesh)
-
-			if AccessoryTable.ColorMode == "Overlay" then
-				local OTransparency = AccessoryTable.OTransparency
-				local OColor = AccessoryTable.OColor or AccessoryTable.Color
-				CreateOverlay(AccessoryTable.Object, OTransparency, OColor)
-				NewMesh.VertexColor = AccessoryTable["Color"]
-			else
-				NewMesh.VertexColor = AccessoryTable["Color"]
-			end
-
-
-			ApplyParticleData(AccessoryTable, NewAccessory.Handle)
-
-
-			--SlotData.Accessories[i].OriginalC0 = NewAccessory.Handle.CFrame:ToObjectSpace(NewWeld.Part1.CFrame)
-			--SlotData.Accessories[i].OriginalC1 = CFrame.new(0,0,0)
-
-			NewWeld.C0 = AccessoryTable.AccessoryWeld.C0
-			NewWeld.C1 = CFrame.new(0,0,0)
-
-			if not AccessoryTable["DistanceFromOrigin"] then
-				AccessoryTable["DistanceFromOrigin"] = AccessoryTable["AccessoryWeld"]["C0"].Position - AccessoryTable["OriginalC0"].Position
-			end
-
-
-			if not AccessoryTable.RotationsApplied then
-				local X, Y, Z = AccessoryTable["AccessoryWeld"]["C0"]:ToEulerAnglesXYZ()
-				local X1, Y1, Z1 = AccessoryTable["OriginalC0"]:ToEulerAnglesXYZ()
-				AccessoryTable["RotationsApplied"] = Vector3.new(X-X1, Y-Y1, Z-Z1)
-			end
-
-			if IsIncorrectIndex == true then
-				table.insert(NewAccessoryTable, AccessoryTable)
-			end
-
-
-		elseif AccessoryTable.IsItemPack then -- its an item pack
-			print("Item pack item detected", AccessoryTable.Name)
-			local GamepassItemTool, GamepassItemCharacter = script.Parent.SpawnGamepassItem:Invoke(Player, AccessoryTable.WeaponName, AccessoryTable.AccessoryWeld.C0, AccessoryTable.Name)
-			AccessoryTable.Object = GamepassItemCharacter
-			AccessoryTable.Object.Handle:FindFirstChild("AccessoryWeld").Part1 = Player.Character:FindFirstChild(AccessoryTable.WeldPart)
-			wait()
-			if IsIncorrectIndex == true then
-				table.insert(NewAccessoryTable, AccessoryTable)
-			end
-
-		elseif AccessoryTable.IsMeshPart then -- its layered clothing
-			warn("Meshpart loading found!", AccessoryTable.AccessoryId)
-			local AccessoryId = AccessoryTable.AccessoryId
-			local InsertedAccessory = LoadAssetWithRetry(AccessoryId, "LoadCharacter MeshPart")
-			if not InsertedAccessory then return end
-			InsertedAccessory.Parent = workspace
-			InsertedAccessory = InsertedAccessory:FindFirstChildOfClass("Accessory")
-			if not InsertedAccessory then return end
-			InsertedAccessory.Handle.Transparency = AccessoryTable.Transparency
-
-			local newVal = Instance.new("IntValue")
-			newVal.Value = AccessoryId
-			newVal.Name = "AccessoryId"
-			newVal.Parent = InsertedAccessory
-
-			InsertedAccessory.Parent = workspace
-			Humanoid:AddAccessory(InsertedAccessory)
-
-			AccessoryTable.Object = InsertedAccessory
-
-			if AccessoryTable.ColorMode == "Overlay" then
-				local OTransparency = AccessoryTable.OTransparency
-				local OColor = AccessoryTable.Color or AccessoryTable.OColor
-				CreateOverlay(AccessoryTable.Object, OTransparency, OColor)
-			end
-
-			ApplyParticleData(AccessoryTable, InsertedAccessory.Handle)
-
-		end
-	end
-
-	if IsIncorrectIndex == true then
-		print("Incorrect index")
-		SlotData["Accessories"] = NewAccessoryTable
-	end
-	HideCollisionParts(Character)
-
-	local collisionConn
-	collisionConn = Character.DescendantAdded:Connect(function(obj)
-		if obj.Name == "CollisionPart" and obj:IsA("BasePart") then
-			obj.Transparency = 1
-			obj.CastShadow = false
-		end
-	end)
-
-	task.delay(2, function()
-		if collisionConn then
-			collisionConn:Disconnect()
-			collisionConn = nil
-		end
-	end)
-
-	return SlotData
-end
-
-local function LimbRemover(Client, LimbToRemove, Transparency)
-	local x = Client.Character:FindFirstChild(LimbToRemove)
-	if x then
-		if Transparency == true then
-			x.Transparency = 1
-		else
-			x.Transparency = 0
-		end
-		local v = x:FindFirstChild("IntendedTransparency")
-		if v then
-			if Transparency == true then
-				v.Value = 1
-			else
-				v.Value = 0
-			end
-		else
-			v = Instance.new("NumberValue")
-			v.Name = "IntendedTransparency"
-			if Transparency == true then
-				v.Value = 1
-			else
-				v.Value = 0
-			end
-		end
-	end
-
-	return true
-end
-
-function deepCopy(original)
-	local copy = {}
-	for k, v in pairs(original) do
-		if type(v) == "table" then
-			v = deepCopy(v)
-		end
-		copy[k] = v
-	end
-	return copy
-end
+local CharacterLoadOperations = CharacterLoader.new({
+	HttpService = HttpService,
+	ReplicatedStorage = ReplicatedStorage,
+	DefaultAccessory = DefaultAccessory,
+	DefaultType = DefaultType,
+	DefaultProportion = DefaultProportion,
+	HeadScaleMultiplier = HEAD_SCALE_MULTIPLIER,
+	TargetHeadAssetId = TARGET_HEAD_ASSET_ID,
+	SpawnGamepassItem = script.Parent:WaitForChild("SpawnGamepassItem"),
+	IsOccupiedSkills = IsOccupiedSkills,
+	FindToolFromItem = FindToolFromItem,
+	GetClassicClothingTemplate = GetClassicClothingTemplate,
+	ApplyHeadBoostAccessoryScale = ApplyHeadBoostAccessoryScale,
+	MeshIdMatches = MeshIdMatches,
+	CreateOverlay = CreateOverlay,
+	ApplyParticleData = ApplyParticleData,
+	LoadAssetWithRetry = LoadAssetWithRetry
+})
+
+local LoadCharacter = CharacterLoadOperations.LoadCharacter
 
 local function LoadLegacyCharacterSlot(Client, Slot, value)
 	print("Loading legacy slot", Slot, "for", Client)
@@ -1530,76 +896,6 @@ local function LoadLegacyCharacterSlot(Client, Slot, value)
 end
 
 
-function round(n)
-	return math.round(n * 100) / 100
-end
-
-local function ValidateAccessoryOwner(Player, Accessory)
-	if Accessory:FindFirstAncestorOfClass("Model") ~= Player.Character then
-		Player:Kick("Invalid request")
-		return false
-	end
-	return true
-end
-
-local OppositeBodyParts = {
-	LeftUpperArm = "RightUpperArm",
-	RightUpperArm = "LeftUpperArm",
-	LeftLowerArm = "RightLowerArm",
-	RightLowerArm = "LeftLowerArm",
-	LeftHand = "RightHand",
-	RightHand = "LeftHand",
-	LeftUpperLeg = "RightUpperLeg",
-	RightUpperLeg = "LeftUpperLeg",
-	LeftLowerLeg = "RightLowerLeg",
-	RightLowerLeg = "LeftLowerLeg",
-	LeftFoot = "RightFoot",
-	RightFoot = "LeftFoot",
-	LeftArm = "RightArm",
-	RightArm = "LeftArm",
-	LeftLeg = "RightLeg",
-	RightLeg = "LeftLeg",
-}
-
-local function MirrorVectorAcrossCharacter(vector)
-	return Vector3.new(-vector.X, vector.Y, vector.Z)
-end
-
-local function MirrorCFrameAcrossCharacter(cframe)
-	local position = MirrorVectorAcrossCharacter(cframe.Position)
-	local right = cframe.RightVector
-	local up = cframe.UpVector
-	local back = -cframe.LookVector
-
-	return CFrame.fromMatrix(
-		position,
-		Vector3.new(right.X, -right.Y, -right.Z),
-		MirrorVectorAcrossCharacter(up),
-		MirrorVectorAcrossCharacter(back)
-	)
-end
-
-local function RecalculateAccessoryTransformData(accessoryTable, character)
-	if accessoryTable.IsMeshPart then return end
-	local accessory = accessoryTable.Object
-	local handle = accessory and accessory:FindFirstChild("Handle")
-	if not handle then return end
-
-	local weld = handle:FindFirstChild("AccessoryWeld") or handle:FindFirstChildOfClass("Weld")
-	if not weld or not weld.Part1 then return end
-
-	local originCF = accessoryTable.OriginalC0:Inverse()
-	local currentCF = handle.CFrame
-	local referenceCF = weld.Part1.CFrame * CFrame.new(originCF.Position)
-	local accCF = referenceCF:ToObjectSpace(CFrame.new() + currentCF.Position)
-	accessoryTable.DistanceFromOrigin = Vector3.new(-accCF.Position.X, -accCF.Position.Y, -accCF.Position.Z)
-
-	local originalRx, originalRy, originalRz = accessoryTable.RootRotation.X, accessoryTable.RootRotation.Y, accessoryTable.RootRotation.Z
-	local currentCFInverse = accessoryTable.AccessoryWeld.C0:Inverse()
-	local currentRx, currentRy, currentRz = currentCFInverse:ToEulerAnglesXYZ()
-	accessoryTable.RotationsApplied = Vector3.new(currentRx - originalRx, currentRy - originalRy, currentRz - originalRz)
-end
-
 local function GetMaxAccessoriesForPlayer(player)
 	local maxAccessories = Constants.MaxAccessories
 	local ownsMoreAccessories = UserOwnsGamePassWithCache(player, 179828905)
@@ -1610,25 +906,6 @@ local function GetMaxAccessoriesForPlayer(player)
 		maxAccessories = Constants.SpecialMaxAccessories
 	end
 	return maxAccessories
-end
-
-local function GetFilteredBroadcastText(textObject)
-	local filteredMessage = GetFilteredBroadcastTextWithRetry(textObject, "GetFilteredBroadcastText")
-
-	if filteredMessage then
-		return filteredMessage
-	end
-
-	return false
-end
-
-local function FilterBroadcastText(text, userId, label)
-	local textObject = FilterStringWithRetry(text, userId, label)
-	if not textObject then
-		return false
-	end
-
-	return GetFilteredBroadcastTextWithRetry(textObject, label)
 end
 
 local Customization = {
