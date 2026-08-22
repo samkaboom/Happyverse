@@ -6,7 +6,7 @@ local function GetMeshPartTextureId(handle)
 		return textureId
 	end
 
-	for i, descendant in pairs(handle:GetDescendants()) do
+	for _, descendant in pairs(handle:GetDescendants()) do
 		if descendant:IsA("Texture") or descendant:IsA("Decal") then
 			if descendant.Texture and descendant.Texture ~= "" then
 				return descendant.Texture

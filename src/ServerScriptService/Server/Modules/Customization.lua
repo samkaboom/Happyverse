@@ -53,7 +53,10 @@ local ParticlesFolder = script:WaitForChild("Particles")
 local CustomizationModules = script.Parent:WaitForChild("CustomizationModules")
 local Serialization = require(CustomizationModules:WaitForChild("Serialization"))
 local AccessoryConversion = require(CustomizationModules:WaitForChild("AccessoryConversion"))
-local OverlayService = require(CustomizationModules:WaitForChild("OverlayService"))
+local Overlays = require(CustomizationModules:WaitForChild("Overlays"))
+local HeadAccessoryScaling = require(CustomizationModules:WaitForChild("HeadAccessoryScaling"))
+local ParticleEffects = require(CustomizationModules:WaitForChild("ParticleEffects"))
+local ServiceRetries = require(CustomizationModules:WaitForChild("ServiceRetries"))
 
 local DefaultType = 0.25
 local DefaultProportion = 0
@@ -70,19 +73,34 @@ local CurrentLegacyDataStore = "TestStore1"
 local CachedCharacterData = {}
 local CachedPlayerSlotNames = {}
 local CachedLegacyCharacterData = {}
+local CachedGamePassOwnership = {}
 local GroupID = 2962831
+local RetryOperations = ServiceRetries.new({
+	DataStoreService = DataStoreService,
+	MarketplaceService = MarketplaceService,
+	InsertService = InsertService,
+	TextService = TextService,
+	CachedGamePassOwnership = CachedGamePassOwnership,
+	LongOperationWarnSeconds = 1,
+	DataStoreMaxRetries = 5,
+	DataStoreRetryDelay = 1,
+	DataStoreBudgetMaxWait = 5
+})
+
+local WarnLongOperation = RetryOperations.WarnLongOperation
+local SetAsyncInBackground = RetryOperations.SetAsyncInBackground
+local GetAsyncWithBudget = RetryOperations.GetAsyncWithBudget
+local UserOwnsGamePassWithCache = RetryOperations.UserOwnsGamePassWithCache
+local LoadAssetWithRetry = RetryOperations.LoadAssetWithRetry
+local FilterStringWithRetry = RetryOperations.FilterStringWithRetry
+local GetFilteredBroadcastTextWithRetry = RetryOperations.GetFilteredBroadcastTextWithRetry
 
 local function CreateOverlay(accessory : Accessory, Transparency : number, Color : Color3)
-	return OverlayService.CreateOverlay(accessory, Transparency, Color, ServerAssets)
+	return Overlays.Create(accessory, ServerAssets.Overlay, Transparency, Color)
 end
 
-local function DeleteOverlay(Accessory : Accessory)
-	return OverlayService.DeleteOverlay(Accessory)
-end
-
-local function ChangeOverlay(Accessory : Accessory, Transparency : number, Color : Color3)
-	return OverlayService.ChangeOverlay(Accessory, Transparency, Color)
-end
+local DeleteOverlay = Overlays.Delete
+local ChangeOverlay = Overlays.Change
 
 local function ConvertToSpecialMesh(playerCharacter, accessory)
 	return AccessoryConversion.ConvertToSpecialMesh(playerCharacter, accessory, DefaultAccessory)
@@ -90,60 +108,62 @@ end
 
 local function FindToolFromItem(player, accessory)
 	for i, tool in pairs(player.Backpack:GetChildren()) do
-		if tool:FindFirstChild("AssociatedObject") then
-			if tool.AssociatedObject.Value == accessory then
-				return tool
-			end
+		local associatedObject = tool:FindFirstChild("AssociatedObject")
+		if associatedObject and associatedObject.Value == accessory then
+			return tool
 		end
 	end
 end
 
 local function IsOccupiedSkills(SkillsValueSlot)
-	local found = false
 	for z, v in pairs(SkillsValueSlot) do
 		warn("FOUND!")
-		found = true
-		break
+		return true
 	end
-	return found
+	return false
 end
 
 local function GETSaveFromSlot(UserId, ForceTrueGET, Slot)
 	print("GET SAVE", UserId, "FORCETRUEGET?", ForceTrueGET, Slot)
 	local success, response = pcall(function()
-		local returned
-		if ForceTrueGET then
+		local userKey = tostring(UserId)
+		local slotKey = tostring(Slot)
+		local dataStoreKey = userKey .. "_" .. slotKey
+
+		local function GetSlotData(cacheResult)
 			print("Getting forced new data for", UserId, "at slot", Slot)
-			returned = NewSlots:GetAsync(tostring(UserId) .. "_" .. tostring(Slot))
+			local getSuccess, returned = GetAsyncWithBudget(NewSlots, dataStoreKey, "NewSlots:GetAsync")
+			if not getSuccess then
+				return false
+			end
 			if returned then
 				returned = DeserializeTable(returned)
+				if cacheResult then
+					if CachedCharacterData[userKey] == nil then
+						CachedCharacterData[userKey] = {}
+					end
+					CachedCharacterData[userKey][slotKey] = returned
+				end
 				return returned
 			else
 				warn(returned)
 				return returned
 			end
-		else
+		end
 
-			local function Execute()
-				print("Getting forced new data for", UserId, "at slot", Slot)
-				returned = NewSlots:GetAsync(tostring(UserId) .. "_" .. tostring(Slot))
-				if returned then
-					returned = DeserializeTable(returned)
-					CachedCharacterData[tostring(UserId)][tostring(Slot)] = returned
-					return returned
-				else
-					warn(returned)
-					return returned
-				end
-			end
+		if ForceTrueGET then
+			return GetSlotData(false)
+		end
 
+		local function Execute()
+			return GetSlotData(true)
+		end
 
-			warn("cache slot:",CachedCharacterData[tostring(UserId)][tostring(Slot)])
-			if CachedCharacterData[tostring(UserId)] == nil then print("No UserId slot"); return Execute() end
-			if CachedCharacterData[tostring(UserId)][tostring(Slot)] == nil then print("No slot in general.");  return Execute() else
+		if CachedCharacterData[userKey] == nil then print("No UserId slot"); return Execute() end
+		warn("cache slot:",CachedCharacterData[userKey][slotKey])
+		if CachedCharacterData[userKey][slotKey] == nil then print("No slot in general.");  return Execute() else
 
-				return DeserializeTable(CachedCharacterData[tostring(UserId)][tostring(Slot)])
-			end
+			return DeserializeTable(CachedCharacterData[userKey][slotKey])
 		end
 	end)
 
@@ -158,12 +178,7 @@ end
 
 
 local function GETLegacySave(Client)
-	local v = CachedLegacyCharacterData[tostring(Client.UserId)]
-	if v then	
-		return v
-	else 
-		return false
-	end
+	return CachedLegacyCharacterData[tostring(Client.UserId)] or false
 end
 
 local function GetAllLegacyData(Client)
@@ -174,14 +189,9 @@ local function GetAllLegacyData(Client)
 		wait()
 
 		local CharacterInfoDS = DataStoreService:GetDataStore(CurrentLegacyDataStore .. tostring(i))
-		local result, value = pcall(function()
+		local success, value = GetAsyncWithBudget(CharacterInfoDS, Client.UserId, "LegacyCharacterInfo:GetAsync")
 
-			local v = CharacterInfoDS:GetAsync(Client.UserId)
-
-			return v
-		end)
-
-		if result == false then
+		if not success then
 			warn("Data store isn't working!")
 			return false
 		end
@@ -196,27 +206,33 @@ local function GetAllLegacyData(Client)
 		end
 	end
 	wait()
-	if found == false then
-		return false
-	else
-		return bigTable
-	end
+	return found and bigTable or false
 end
-
 
 local function POSTSave(UserId, Table, Slot, IgnoreCache) -- loading
 	local success, response = pcall(function()
+		local userKey = tostring(UserId)
+		local slotKey = tostring(Slot)
+		local serializeStartedAt = os.clock()
 		local ActualTable = SerializeTable(Table)
+		WarnLongOperation("SerializeTable", serializeStartedAt)
 		warn("POSTING NOW", UserId, Slot)
-		NewSlots:SetAsync(tostring(UserId) .. "_" .. tostring(Slot), ActualTable)
 
-		if CachedCharacterData[tostring(UserId)] == nil then CachedCharacterData[tostring(UserId)] = {}; print("Had no cached data so POSTSave made it") end
-		if IgnoreCache == nil or IgnoreCache == false then CachedCharacterData[tostring(UserId)][tostring(Slot)] = Table end
-		CachedPlayerSlotNames[UserId][tostring(Slot)] = Table.SlotName
+		if CachedCharacterData[userKey] == nil then CachedCharacterData[userKey] = {}; print("Had no cached data so POSTSave made it") end
+		if IgnoreCache == nil or IgnoreCache == false then CachedCharacterData[userKey][slotKey] = Table end
+		CachedPlayerSlotNames[UserId][slotKey] = Table.SlotName
+
+		SetAsyncInBackground(NewSlots, userKey .. "_" .. slotKey, ActualTable, "NewSlots:SetAsync")
+
 		return Table
 	end)
 
-	if success then return true else warn(response) return false end
+	if success then
+		return true
+	else
+		warn(response)
+		return false
+	end
 
 end
 
@@ -229,13 +245,38 @@ local DeserializeCFrame = Serialization.DeserializeCFrame
 local SerializeMaterial = Serialization.SerializeMaterial
 local DeserializeMaterial = Serialization.DeserializeMaterial
 
+local function SetDefaultSerializedParticleData(AccessoryTable)
+	AccessoryTable.Particle = "None"
+	AccessoryTable.ParticleColor = {["R"] = 1, ["G"] = 1, ["B"] = 1}
+	AccessoryTable.ParticleSize = 0
+	AccessoryTable.ParticleTransparency = 0
+	AccessoryTable.ParticleRate = 0
+end
+
+local function SetDefaultParticleData(AccessoryTable)
+	AccessoryTable.Particle = "None"
+	AccessoryTable.ParticleColor = Color3.fromRGB(255,255,255)
+	AccessoryTable.ParticleSize = 0
+	AccessoryTable.ParticleTransparency = 0
+	AccessoryTable.ParticleRate = 0
+end
+
+local function GetRootRotationFromC0(C0)
+	local X, Y, Z = C0:Inverse():ToEulerAnglesXYZ()
+	return X, Y, Z
+end
+
+local function SerializeOverlayColorData(AccessoryTable)
+	if not AccessoryTable.OColor then AccessoryTable.OColor = Color3.new(1,1,1) end
+	AccessoryTable.OColor = SerializeColor3(AccessoryTable.OColor)
+
+	if not AccessoryTable.OriginalOColor then AccessoryTable.OriginalOColor = Color3.new(1,1,1) end
+	AccessoryTable.OriginalOColor = SerializeColor3(AccessoryTable.OriginalOColor)
+end
+
 local function SerializeParticleData(AccessoryTable)
 	if AccessoryTable.Particle == nil then
-		AccessoryTable.Particle = "None"
-		AccessoryTable.ParticleColor = {["R"] = 1, ["G"] = 1, ["B"] = 1}
-		AccessoryTable.ParticleSize = 0
-		AccessoryTable.ParticleTransparency = 0
-		AccessoryTable.ParticleRate = 0
+		SetDefaultSerializedParticleData(AccessoryTable)
 	else
 		AccessoryTable.ParticleColor = SerializeColor3(AccessoryTable.ParticleColor)
 	end
@@ -243,11 +284,7 @@ end
 
 local function DeserializeParticleData(AccessoryTable)
 	if AccessoryTable.Particle == nil then
-		AccessoryTable.Particle = "None"
-		AccessoryTable.ParticleColor = Color3.fromRGB(255,255,255)
-		AccessoryTable.ParticleSize = 0
-		AccessoryTable.ParticleTransparency = 0
-		AccessoryTable.ParticleRate = 0
+		SetDefaultParticleData(AccessoryTable)
 	else
 		AccessoryTable.ParticleColor = DeserializeColor3(AccessoryTable.ParticleColor)
 		if AccessoryTable.ParticleSize == nil then
@@ -263,7 +300,7 @@ local function SerializeTransformData(AccessoryTable, IncludeRevertC0)
 	AccessoryTable.AccessoryWeld.C1 = SerializeCFrame(AccessoryTable.AccessoryWeld.C1)
 
 	if not AccessoryTable.RootRotation then
-		local X, Y, Z = AccessoryTable.OriginalC0:Inverse():ToEulerAnglesXYZ()
+		local X, Y, Z = GetRootRotationFromC0(AccessoryTable.OriginalC0)
 		AccessoryTable.RootRotation = {["X"] = X, ["Y"] = Y, ["Z"] = Z}
 	else
 		AccessoryTable.RootRotation = SerializeVector3(AccessoryTable.RootRotation)
@@ -298,7 +335,7 @@ local function DeserializeTransformData(AccessoryTable, IncludeRevertC0)
 
 	AccessoryTable.OriginalC0 = DeserializeCFrame(AccessoryTable.OriginalC0)
 	if not AccessoryTable.RootRotation then
-		local X, Y, Z = AccessoryTable.OriginalC0:Inverse():ToEulerAnglesXYZ()
+		local X, Y, Z = GetRootRotationFromC0(AccessoryTable.OriginalC0)
 		AccessoryTable.RootRotation = Vector3.new(X,Y,Z)
 	else
 		AccessoryTable.RootRotation = DeserializeVector3(AccessoryTable.RootRotation)
@@ -319,11 +356,7 @@ local function DeserializeTransformData(AccessoryTable, IncludeRevertC0)
 end
 
 local function SerializeStandardAccessoryData(AccessoryTable, IncludeRevertC0)
-	if not AccessoryTable.OColor then AccessoryTable.OColor = Color3.new(1,1,1) end
-	AccessoryTable.OColor = SerializeColor3(AccessoryTable.OColor)
-
-	if not AccessoryTable.OriginalOColor then AccessoryTable.OriginalOColor = Color3.new(1,1,1) end
-	AccessoryTable.OriginalOColor = SerializeColor3(AccessoryTable.OriginalOColor)
+	SerializeOverlayColorData(AccessoryTable)
 
 	if not AccessoryTable.ColorMode then AccessoryTable.ColorMode = "VertexColor" end
 	SerializeParticleData(AccessoryTable)
@@ -360,11 +393,7 @@ local function SerializeItemPackData(AccessoryTable)
 end
 
 local function SerializeMeshPartData(AccessoryTable)
-	if not AccessoryTable.OColor then AccessoryTable.OColor = Color3.new(1,1,1) end
-	AccessoryTable.OColor = SerializeColor3(AccessoryTable.OColor)
-
-	if not AccessoryTable.OriginalOColor then AccessoryTable.OriginalOColor = Color3.new(1,1,1) end
-	AccessoryTable.OriginalOColor = SerializeColor3(AccessoryTable.OriginalOColor)
+	SerializeOverlayColorData(AccessoryTable)
 
 	AccessoryTable.Material = SerializeMaterial(AccessoryTable.Material)
 	AccessoryTable.OriginalMaterial = SerializeMaterial(AccessoryTable.OriginalMaterial)
@@ -800,274 +829,21 @@ end
 
 local CachedAccessoriesUniversal= {}
 
-local TARGET_HEAD_ASSET_ID = "2432102561"
-local HEAD_SCALE_MULTIPLIER = 1
-
-local function MeshIdMatches(meshId, targetId)
-	return tostring(meshId):find(targetId, 1, true) ~= nil
-end
-
-local EXTERNAL_HEAD_BOOST = 1.058
-local HEAD_ACCESSORY_COUNTER_SCALE = 1 / EXTERNAL_HEAD_BOOST
-
-local function ScaleVector3(v, multiplier)
-	return Vector3.new(
-		v.X * multiplier,
-		v.Y * multiplier,
-		v.Z * multiplier
-	)
-end
-
-local function ApplyHeadBoostAccessoryScale(AccessoryTable, NewAccessory, NewMesh)
-	if not AccessoryTable or not NewAccessory or not NewMesh then
-		return
-	end
-
-	local savedMeshScale = AccessoryTable.Scale
-	local savedHandleSize = AccessoryTable.HandleSize
-
-	if not savedMeshScale or not savedHandleSize then
-		return
-	end
-
-	-- This still tells the other server script not to shrink it again.
-	NewAccessory:SetAttribute("HeadScaleHandledByCustomizer", true)
-
-	-- IMPORTANT:
-	-- On load, use the saved visual size directly.
-	-- Do NOT counter-scale here.
-	NewAccessory.Handle.Size = savedHandleSize
-	NewMesh.Scale = savedMeshScale
-
-	if MeshIdMatches(AccessoryTable["MeshId"], TARGET_HEAD_ASSET_ID) then
-		-- Keep custom head unmodified here because the other server script handles actual head boost.
-		NewAccessory.Handle.Size = savedHandleSize
-		NewMesh.Scale = savedMeshScale
-	end
-end
-
-local function GetAccessoryMeshId(accessory)
-	if not accessory then return "" end
-
-	local handle = accessory:FindFirstChild("Handle")
-	if not handle then return "" end
-
-	local specialMesh = handle:FindFirstChildOfClass("SpecialMesh")
-	if specialMesh then
-		return specialMesh.MeshId
-	end
-
-	if handle:IsA("MeshPart") then
-		return handle.MeshId
-	end
-
-	return ""
-end
-
-local function IsLiveHeadAccessory(accessory, character)
-	if not accessory or not character then
-		return false
-	end
-
-	local handle = accessory:FindFirstChild("Handle")
-	local head = character:FindFirstChild("Head")
-
-	if not handle or not head then
-		return false
-	end
-
-	-- If this accessory is the custom head itself, do NOT shrink it.
-	if MeshIdMatches(GetAccessoryMeshId(accessory), TARGET_HEAD_ASSET_ID) then
-		return false
-	end
-
-	-- Check the weld after Humanoid:AddAccessory.
-	local weld = handle:FindFirstChildOfClass("Weld")
-	if weld then
-		if weld.Part0 == head or weld.Part1 == head then
-			return true
-		end
-
-		if weld.Part0 and weld.Part0.Name == "Head" then
-			return true
-		end
-
-		if weld.Part1 and weld.Part1.Name == "Head" then
-			return true
-		end
-	end
-
-	-- Attachment fallback.
-	for _, child in ipairs(handle:GetChildren()) do
-		if child:IsA("Attachment") and head:FindFirstChild(child.Name) then
-			return true
-		end
-	end
-
-	return false
-end
-
-local function ApplyLiveInsertedHeadAccessoryCounterScale(accessory, character)
-	if not accessory or not character then
-		return
-	end
-
-	if accessory:GetAttribute("HeadScaleHandledByCustomizer") then
-		return
-	end
-
-	if not IsLiveHeadAccessory(accessory, character) then
-		return
-	end
-
-	local handle = accessory:FindFirstChild("Handle")
-	if not handle then
-		return
-	end
-
-	local specialMesh = handle:FindFirstChildOfClass("SpecialMesh")
-
-	-- Store the original/base scale before visually counter-scaling.
-	-- This helps prevent save/load from treating the shrunken scale as the new original.
-	if specialMesh then
-		if not accessory:GetAttribute("BaseMeshScaleX") then
-			accessory:SetAttribute("BaseMeshScaleX", specialMesh.Scale.X)
-			accessory:SetAttribute("BaseMeshScaleY", specialMesh.Scale.Y)
-			accessory:SetAttribute("BaseMeshScaleZ", specialMesh.Scale.Z)
-		end
-
-		specialMesh.Scale = ScaleVector3(
-			Vector3.new(
-				accessory:GetAttribute("BaseMeshScaleX"),
-				accessory:GetAttribute("BaseMeshScaleY"),
-				accessory:GetAttribute("BaseMeshScaleZ")
-			),
-			HEAD_ACCESSORY_COUNTER_SCALE
-		)
-	else
-		if not accessory:GetAttribute("BaseHandleSizeX") then
-			accessory:SetAttribute("BaseHandleSizeX", handle.Size.X)
-			accessory:SetAttribute("BaseHandleSizeY", handle.Size.Y)
-			accessory:SetAttribute("BaseHandleSizeZ", handle.Size.Z)
-		end
-
-		handle.Size = ScaleVector3(
-			Vector3.new(
-				accessory:GetAttribute("BaseHandleSizeX"),
-				accessory:GetAttribute("BaseHandleSizeY"),
-				accessory:GetAttribute("BaseHandleSizeZ")
-			),
-			HEAD_ACCESSORY_COUNTER_SCALE
-		)
-	end
-
-	accessory:SetAttribute("HeadCounterScaledLiveInsert", true)
-	accessory:SetAttribute("HeadScaleHandledByCustomizer", true)
-end
-
-
-local function ApplyParticleColor(AccessoryTable, ParticleEmitter)
-	local startColor = AccessoryTable.ParticleColor
-	if ParticleEmitter.Name == "Fire" and startColor ~= Color3.new(1,1,1) then
-		ParticleEmitter.Color = ColorSequence.new({
-			ColorSequenceKeypoint.new(0, startColor),
-			ColorSequenceKeypoint.new(0.5, Color3.new(startColor.R, startColor.G/3, startColor.B/3)),
-			ColorSequenceKeypoint.new(1, Color3.new(startColor.R, startColor.G/10, startColor.B/10))
-		})
-	else
-		ParticleEmitter.Color = ColorSequence.new{
-			ColorSequenceKeypoint.new(0, startColor),
-			ColorSequenceKeypoint.new(1, startColor)
-		}
-	end
-end
-
-local function ConfigureParticleEmitter(AccessoryTable, P)
-	if P.Name ~= "Fire" then
-		AccessoryTable.ParticleRate = math.clamp(AccessoryTable.ParticleRate, 0, 50)
-	end
-
-	if P.Name == "GentleAura" then
-		P.Rate = AccessoryTable.ParticleRate
-		P.Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0,1),
-			NumberSequenceKeypoint.new(0.5,AccessoryTable.ParticleTransparency),
-			NumberSequenceKeypoint.new(1,1)
-		})
-		P.Size = NumberSequence.new({
-			NumberSequenceKeypoint.new(0,AccessoryTable.ParticleSize),
-			NumberSequenceKeypoint.new(1,AccessoryTable.ParticleSize)
-		})
-	elseif P.Name == "HardSmoke" then
-		P.Rate = AccessoryTable.ParticleRate
-		P.Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0,1),
-			NumberSequenceKeypoint.new(0.5,AccessoryTable.ParticleTransparency),
-			NumberSequenceKeypoint.new(1,1)
-		})
-		P.Size = NumberSequence.new({
-			NumberSequenceKeypoint.new(0,0.3),
-			NumberSequenceKeypoint.new(0.3,AccessoryTable.ParticleSize),
-			NumberSequenceKeypoint.new(1,math.clamp(AccessoryTable.ParticleSize-0.1, 0.1, math.huge), 0.5)
-		})
-	elseif P.Name == "SoftSmoke" then
-		P.Rate = AccessoryTable.ParticleRate
-		P.Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0,1),
-			NumberSequenceKeypoint.new(0.5,AccessoryTable.ParticleTransparency),
-			NumberSequenceKeypoint.new(1,1)
-		})
-		P.Size = NumberSequence.new({
-			NumberSequenceKeypoint.new(0,0.3),
-			NumberSequenceKeypoint.new(0.3,AccessoryTable.ParticleSize),
-			NumberSequenceKeypoint.new(1,AccessoryTable.ParticleSize+0.4, 0.5)
-		})
-	elseif P.Name == "Lightning" then
-		P.Rate = AccessoryTable.ParticleRate
-		P.Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0,AccessoryTable.ParticleTransparency),
-			NumberSequenceKeypoint.new(1,AccessoryTable.ParticleTransparency)
-		})
-		P.Size = NumberSequence.new({
-			NumberSequenceKeypoint.new(0,AccessoryTable.ParticleSize, 0.75),
-			NumberSequenceKeypoint.new(0.3,AccessoryTable.ParticleSize+0.75,0.5),
-			NumberSequenceKeypoint.new(0.5,math.abs(AccessoryTable.ParticleSize-0.25),0.375),
-			NumberSequenceKeypoint.new(0.7,AccessoryTable.ParticleSize+0.75,0.5),
-			NumberSequenceKeypoint.new(1,AccessoryTable.ParticleSize, 0.75)
-		})
-	elseif P.Name == "Fire" then
-		P.Rate = AccessoryTable.ParticleRate
-		P.Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0,AccessoryTable.ParticleTransparency),
-			NumberSequenceKeypoint.new(1,AccessoryTable.ParticleTransparency)
-		})
-		P.Size = NumberSequence.new({
-			NumberSequenceKeypoint.new(0,AccessoryTable.ParticleSize),
-			NumberSequenceKeypoint.new(1,0)
-		})
-	end
-end
+local TARGET_HEAD_ASSET_ID = HeadAccessoryScaling.TargetHeadAssetId
+local HEAD_SCALE_MULTIPLIER = HeadAccessoryScaling.HeadScaleMultiplier
+local MeshIdMatches = HeadAccessoryScaling.MeshIdMatches
+local ApplyHeadBoostAccessoryScale = HeadAccessoryScaling.ApplyHeadBoostAccessoryScale
+local ApplyLiveInsertedHeadAccessoryCounterScale = HeadAccessoryScaling.ApplyLiveInsertedHeadAccessoryCounterScale
+local ApplyParticleColor = ParticleEffects.ApplyParticleColor
+local ConfigureParticleEmitter = ParticleEffects.ConfigureParticleEmitter
 
 local function ApplyParticleData(AccessoryTable, Handle)
-	if AccessoryTable.Particle == "None" then
-		return
-	end
-
-	local Found = ParticlesFolder:FindFirstChild(AccessoryTable.Particle)
-	if not Found then
-		return
-	end
-
-	Found = Found:Clone()
-	Found.Parent = Handle
-	Found.Enabled = true
-	ApplyParticleColor(AccessoryTable, Found)
-	ConfigureParticleEmitter(AccessoryTable, Found)
+	return ParticleEffects.ApplyParticleData(AccessoryTable, Handle, ParticlesFolder)
 end
 
 local function GetClassicClothingTemplate(assetId, className, templateProperty)
 	local success, template = pcall(function()
-		local asset = InsertService:LoadAsset(assetId)
+		local asset = LoadAssetWithRetry(assetId, "GetClassicClothingTemplate")
 		if asset then
 			local clothing = asset:FindFirstChildOfClass(className)
 			if clothing then
@@ -1356,9 +1132,11 @@ function LoadCharacter(Player, SlotData)
 		elseif AccessoryTable.IsMeshPart then -- its layered clothing
 			warn("Meshpart loading found!", AccessoryTable.AccessoryId)
 			local AccessoryId = AccessoryTable.AccessoryId
-			local InsertedAccessory = InsertService:LoadAsset(AccessoryId)
+			local InsertedAccessory = LoadAssetWithRetry(AccessoryId, "LoadCharacter MeshPart")
+			if not InsertedAccessory then return end
 			InsertedAccessory.Parent = workspace
 			InsertedAccessory = InsertedAccessory:FindFirstChildOfClass("Accessory")
+			if not InsertedAccessory then return end
 			InsertedAccessory.Handle.Transparency = AccessoryTable.Transparency
 
 			local newVal = Instance.new("IntValue")
@@ -1824,10 +1602,7 @@ end
 
 local function GetMaxAccessoriesForPlayer(player)
 	local maxAccessories = Constants.MaxAccessories
-	local ownsMoreAccessories = false
-	pcall(function()
-		ownsMoreAccessories = MarketplaceService:UserOwnsGamePassAsync(player.UserId, 179828905)
-	end)
+	local ownsMoreAccessories = UserOwnsGamePassWithCache(player, 179828905)
 	if ownsMoreAccessories then
 		maxAccessories = Constants.MoreAccessoriesGamepassMaxAccessories
 	end
@@ -1838,17 +1613,22 @@ local function GetMaxAccessoriesForPlayer(player)
 end
 
 local function GetFilteredBroadcastText(textObject)
-	local filteredMessage
-	local success, errorMessage = pcall(function()
-		filteredMessage = textObject:GetNonChatStringForBroadcastAsync()
-	end)
+	local filteredMessage = GetFilteredBroadcastTextWithRetry(textObject, "GetFilteredBroadcastText")
 
-	if success then
+	if filteredMessage then
 		return filteredMessage
-	elseif errorMessage then
-		print("Error filtering message:", errorMessage)
 	end
+
 	return false
+end
+
+local function FilterBroadcastText(text, userId, label)
+	local textObject = FilterStringWithRetry(text, userId, label)
+	if not textObject then
+		return false
+	end
+
+	return GetFilteredBroadcastTextWithRetry(textObject, label)
 end
 
 local Customization = {
@@ -2016,8 +1796,8 @@ local Customization = {
 			--Player = self[Player.Name]
 			local Folder = ReplicatedStorage.Info[Player.Name]
 
-			NameBioTable.Name = GetFilteredBroadcastText(TextService:FilterStringAsync(NameBioTable.Name, Player.UserId))
-			NameBioTable.Bio = GetFilteredBroadcastText(TextService:FilterStringAsync(NameBioTable.Bio, Player.UserId))
+			NameBioTable.Name = FilterBroadcastText(NameBioTable.Name, Player.UserId, "NameBio.Name")
+			NameBioTable.Bio = FilterBroadcastText(NameBioTable.Bio, Player.UserId, "NameBio.Bio")
 			if NameBioTable.Name == false or NameBioTable.Bio == false then return false end
 
 			Folder.CName.Value = NameBioTable.Name
@@ -2034,8 +1814,8 @@ local Customization = {
 			local Folder = ReplicatedStorage.Info[Player.Name]
 
 			if filter then
-				EmpowermentTable.Description = GetFilteredBroadcastText(TextService:FilterStringAsync(EmpowermentTable.Description, Player.UserId))
-				EmpowermentTable.Title = GetFilteredBroadcastText(TextService:FilterStringAsync(EmpowermentTable.Title, Player.UserId))
+				EmpowermentTable.Description = FilterBroadcastText(EmpowermentTable.Description, Player.UserId, "Empowerment.Description")
+				EmpowermentTable.Title = FilterBroadcastText(EmpowermentTable.Title, Player.UserId, "Empowerment.Title")
 				if EmpowermentTable.Description == false or EmpowermentTable.Title == false then return false end
 			end
 
@@ -2050,8 +1830,8 @@ local Customization = {
 		local Folder = ReplicatedStorage.Info[Player.Name]
 
 		if filter then
-			SkillTable.Description = GetFilteredBroadcastText(TextService:FilterStringAsync(SkillTable.Description, Player.UserId))
-			SkillTable.Title = GetFilteredBroadcastText(TextService:FilterStringAsync(SkillTable.Title, Player.UserId))
+			SkillTable.Description = FilterBroadcastText(SkillTable.Description, Player.UserId, "Skill.Description")
+			SkillTable.Title = FilterBroadcastText(SkillTable.Title, Player.UserId, "Skill.Title")
 			if SkillTable.Description == false or SkillTable.Title == false then return false end
 		end
 
@@ -2096,7 +1876,8 @@ local Customization = {
 
 			local function isRealFace(Pantsid)
 				local suc, ass = pcall(function()
-					local ass1 = InsertService:LoadAsset(Pantsid)
+					local ass1 = LoadAssetWithRetry(Pantsid, "Face2 LoadAsset")
+					if not ass1 then return false end
 					ass1.Parent = workspace
 					if ass1 then
 						if ass1:FindFirstChildOfClass("Decal") then
@@ -2288,7 +2069,8 @@ local Customization = {
 
 			local function isRealAnimation(shirtid)
 				local suc, ass = pcall(function()
-					local ass1 = InsertService:LoadAsset(shirtid)
+					local ass1 = LoadAssetWithRetry(shirtid, "Animations LoadAsset")
+					if not ass1 then return false end
 					ass1.Parent = workspace
 					if ass1 then
 						if ass1:FindFirstChildOfClass("Animation") then
@@ -2573,7 +2355,7 @@ local Customization = {
 
 			local function isRealAccessory(accessoryid)
 				local suc, ass = pcall(function()
-					local ass1 = InsertService:LoadAsset(accessoryid)
+					local ass1 = LoadAssetWithRetry(accessoryid, "AddAccessory LoadAsset")
 
 					if ass1 then
 						if ass1:FindFirstChildOfClass("Accessory") then
@@ -2583,7 +2365,6 @@ local Customization = {
 							return false
 						end
 					else
-						print(ass1:FindFirstChild())
 						return false
 					end
 				end)
@@ -2890,9 +2671,11 @@ local Customization = {
 
 					warn("Meshpart loading found!", AccessoryTable.AccessoryId)
 					local AccessoryId = AccessoryTable.AccessoryId
-					local InsertedAccessory = InsertService:LoadAsset(AccessoryId)
+					local InsertedAccessory = LoadAssetWithRetry(AccessoryId, "Copy MeshPart")
+					if not InsertedAccessory then return false end
 					InsertedAccessory.Parent = workspace
 					InsertedAccessory = InsertedAccessory:FindFirstChildOfClass("Accessory")
+					if not InsertedAccessory then return false end
 					InsertedAccessory.Handle.Transparency = AccessoryTable.Transparency
 
 					local newVal = Instance.new("IntValue")
@@ -2985,7 +2768,7 @@ local Customization = {
 				}
 
 				local newS = SerializeTable(NewSlot)
-				OutfitIDsDataStore:SetAsync(tostring(OutfitID), newS)
+				SetAsyncInBackground(OutfitIDsDataStore, tostring(OutfitID), newS, "OutfitIDsDataStore:SetAsync")
 				return
 			end)
 
@@ -3001,7 +2784,10 @@ local Customization = {
 				local random = math.random(100000, 999999)
 				print("New OutfitID:", random)
 
-				local found = OutfitIDsDataStore:GetAsync(tostring(random))
+				local success, found = GetAsyncWithBudget(OutfitIDsDataStore, tostring(random), "OutfitIDsDataStore:GetAsync")
+				if not success then
+					return false
+				end
 
 				if found then
 					return CheckIfUsedAndFindNew()
@@ -3011,6 +2797,7 @@ local Customization = {
 			end
 
 			OutfitID = CheckIfUsedAndFindNew()
+			if not OutfitID then return false end
 
 			local success, result = pcall(function()
 
@@ -3021,7 +2808,7 @@ local Customization = {
 				}
 
 				local newS = SerializeTable(NewSlot)
-				OutfitIDsDataStore:SetAsync(tostring(OutfitID), newS)
+				SetAsyncInBackground(OutfitIDsDataStore, tostring(OutfitID), newS, "OutfitIDsDataStore:SetAsync")
 				return
 			end)
 			if success then return OutfitID, Player.UserId else warn(result) return false end
@@ -3031,10 +2818,7 @@ local Customization = {
 
 	LoadOutfitID = function(self, Player, OutfitID)
 		if OutfitID then
-			local success, result = pcall(function()
-				local found = OutfitIDsDataStore:GetAsync(tostring(OutfitID))	
-				return found
-			end)
+			local success, result = GetAsyncWithBudget(OutfitIDsDataStore, tostring(OutfitID), "OutfitIDsDataStore:GetAsync")
 
 			if success then
 				if result then
@@ -3073,7 +2857,7 @@ local Customization = {
 				}
 
 				local newS = SerializeTable(NewSlot)
-				AccessoryIDsDataStore:SetAsync(tostring(ID), newS)
+				SetAsyncInBackground(AccessoryIDsDataStore, tostring(ID), newS, "AccessoryIDsDataStore:SetAsync")
 				return
 			end)
 
@@ -3087,7 +2871,10 @@ local Customization = {
 				local random = math.random(100000, 999999)
 				print("New AccessoryID:", random)
 
-				local found = AccessoryIDsDataStore:GetAsync(tostring(random))
+				local success, found = GetAsyncWithBudget(AccessoryIDsDataStore, tostring(random), "AccessoryIDsDataStore:GetAsync")
+				if not success then
+					return false
+				end
 
 				if found then
 					return CheckIfUsedAndFindNew()
@@ -3097,6 +2884,7 @@ local Customization = {
 			end
 
 			ID = CheckIfUsedAndFindNew()
+			if not ID then return false end
 
 			local success, result = pcall(function()
 
@@ -3107,7 +2895,7 @@ local Customization = {
 
 				}
 				local newS = SerializeAccessoryTable(NewSlot)
-				AccessoryIDsDataStore:SetAsync(tostring(ID), newS)
+				SetAsyncInBackground(AccessoryIDsDataStore, tostring(ID), newS, "AccessoryIDsDataStore:SetAsync")
 				return
 			end)
 			if success then return ID, Player.UserId else warn(result) return false end
@@ -3117,10 +2905,8 @@ local Customization = {
 
 	LoadAccessoryID = function(self, player, ID)
 
-		local success, result = pcall(function()
-			warn("Getting Accessory ID thingy", ID)
-			return AccessoryIDsDataStore:GetAsync(tostring(ID))
-		end)
+		warn("Getting Accessory ID thingy", ID)
+		local success, result = GetAsyncWithBudget(AccessoryIDsDataStore, tostring(ID), "AccessoryIDsDataStore:GetAsync")
 		warn("results:", success, result)
 		if success and result then
 			warn(result)
@@ -3209,9 +2995,11 @@ local Customization = {
 					local Humanoid = player.Character.Humanoid
 					warn("Meshpart loading found!", AccessoryTable.AccessoryId)
 					local AccessoryId = AccessoryTable.AccessoryId
-					local InsertedAccessory = InsertService:LoadAsset(AccessoryId)
+					local InsertedAccessory = LoadAssetWithRetry(AccessoryId, "LoadAccessoryID MeshPart")
+					if not InsertedAccessory then return false end
 					InsertedAccessory.Parent = workspace
 					InsertedAccessory = InsertedAccessory:FindFirstChildOfClass("Accessory")
+					if not InsertedAccessory then return false end
 					InsertedAccessory.Handle.Transparency = AccessoryTable.Transparency
 
 					local newVal = Instance.new("IntValue")
@@ -3273,9 +3061,7 @@ local Customization = {
 		end
 	end,
 	Tutorial = function(self, Player)
-		local success, res = pcall(function()
-			return TutorialDataStore:GetAsync(Player.UserId)
-		end)
+		local success, res = GetAsyncWithBudget(TutorialDataStore, Player.UserId, "TutorialDataStore:GetAsync")
 		if success then
 			if res == nil then res = false end
 			return res
@@ -3284,10 +3070,7 @@ local Customization = {
 		end
 	end,
 	SetTutorial = function(self, Player, val)
-		local success, res = pcall(function()
-			TutorialDataStore:SetAsync(Player.UserId, val)
-			return
-		end)
+		SetAsyncInBackground(TutorialDataStore, Player.UserId, val, "TutorialDataStore:SetAsync")
 		return true
 	end
 }
@@ -3320,7 +3103,9 @@ function Customization.IndexPlayer(player)
 	CachedCharacterData[tostring(player.UserId)] = {}
 	local bigtable = {}
 	local Slots = Constants.BaseSaveSlots
-	local SaveSlots1, SaveSlots2, SaveSlots3 = MarketplaceService:UserOwnsGamePassAsync(player.UserId, 21918073), MarketplaceService:UserOwnsGamePassAsync(player.UserId, 53597806), MarketplaceService:UserOwnsGamePassAsync(player.UserId, 144388696)
+	local SaveSlots1 = UserOwnsGamePassWithCache(player, 21918073)
+	local SaveSlots2 = UserOwnsGamePassWithCache(player, 53597806)
+	local SaveSlots3 = UserOwnsGamePassWithCache(player, 144388696)
 	if SaveSlots1 then
 		Slots = math.clamp(Slots * 2, Slots, Constants.SpecialMaxSaveSlots)
 	end
@@ -3334,9 +3119,7 @@ function Customization.IndexPlayer(player)
 		Slots = Constants.SpecialMaxSaveSlots
 	end
 
-	local success, res = pcall(function()
-		return SlotNameDS:GetAsync(player.UserId)
-	end)
+	local success, res = GetAsyncWithBudget(SlotNameDS, player.UserId, "SlotNameDS:GetAsync")
 	if success then
 		if res == nil then
 			warn("Player is not using the more efficient PlayerSlotName Datastore. Converting now.")
@@ -3353,9 +3136,7 @@ function Customization.IndexPlayer(player)
 				newTable[i] = v.SlotName
 			end
 			wait(2)
-			local success, res = pcall(function()
-				SlotNameDS:SetAsync(player.UserId, newTable)
-			end)
+			SetAsyncInBackground(SlotNameDS, player.UserId, newTable, "SlotNameDS:SetAsync")
 			CachedPlayerSlotNames[player.UserId] = newTable
 		else
 			warn("Player is using the PlayerSlotName Datastore. Updating cache.")
@@ -3400,7 +3181,12 @@ game.Players.PlayerRemoving:Connect(function(player)
 	Customization[player.Name] = nil
 	CachedCharacterData[tostring(player.UserId)] = nil
 	CachedLegacyCharacterData[player.UserId] = nil
-	SlotNameDS:SetAsync(player.UserId, CachedPlayerSlotNames[player.UserId])
+	for cacheKey in pairs(CachedGamePassOwnership) do
+		if string.match(cacheKey, "^" .. tostring(player.UserId) .. "_") then
+			CachedGamePassOwnership[cacheKey] = nil
+		end
+	end
+	SetAsyncInBackground(SlotNameDS, player.UserId, CachedPlayerSlotNames[player.UserId], "SlotNameDS:SetAsync")
 	CachedPlayerSlotNames[player.UserId] = nil
 end)
 
